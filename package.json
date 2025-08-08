@@ -8,6 +8,10 @@
   "scripts": {
     "start": "electron .",
     "clean": "rimraf dist",
+    "pack": "electron-builder --dir --publish never",
+    "dist": "electron-builder --publish never",
+    "dist:win": "electron-builder --win --publish never",
+    "dist:win:x64": "electron-builder --win nsis --x64 --publish never",
     "postinstall": "",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix"
@@ -18,6 +22,40 @@
   "devDependencies": {
     "electron": "^30.0.0",
     "eslint": "^8.57.0",
-    "rimraf": "^5.0.10"
+    "rimraf": "^5.0.10",
+    "electron-builder": "^24.13.3"
+  },
+  "build": {
+    "appId": "io.terraform.ui",
+    "productName": "Terraform UI",
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "electron/**/*",
+      "renderer/**/*",
+      "example_terraform/**/*",
+      "package.json"
+    ],
+    "asar": true,
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        }
+      ],
+      "artifactName": "${productName}-${version}-${arch}.${ext}"
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": false,
+      "deleteAppDataOnUninstall": false
+    }
   }
 }

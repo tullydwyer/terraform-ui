@@ -28,6 +28,34 @@ An advanced user UI for Terraform.
 
 You can try the sample under `example_terraform/tfm-example`.
 
+## Build (Windows .exe)
+- Ensure you are on Windows with Node 18+ installed.
+- Install dependencies (`npm install`).
+- Build an installer (.exe):
+  ```bash
+  npm run dist:win
+  ```
+  Outputs to `dist/` (NSIS one-click installer). For 64-bit only build:
+  ```bash
+  npm run dist:win:x64
+  ```
+
+Notes:
+- The app is packaged using Electron Builder (NSIS target). The generated installer will install a desktop app that launches `electron/main.js` with the bundled renderer.
+- You still need the Terraform CLI installed on the machine where you run the app; this project does not bundle Terraform itself.
+
+Troubleshooting (Windows symlink privilege during build):
+- If the build fails with a 7-Zip error like “Cannot create symbolic link: A required privilege is not held by the client”, do one of the following:
+  - Run PowerShell as Administrator and re-run the build
+  - Or enable Windows Developer Mode (Settings → Privacy & Security → For developers → Developer Mode), then re-open PowerShell
+- Clear the partially extracted cache before retrying:
+  ```powershell
+  if (Test-Path "$env:LOCALAPPDATA\electron-builder\Cache\winCodeSign") {
+    Remove-Item "$env:LOCALAPPDATA\electron-builder\Cache\winCodeSign" -Recurse -Force
+  }
+  npm run dist:win
+  ```
+
 ## Usage Notes
 - Logs stream in real-time at the bottom panel.
 - “Refresh” uses `apply -refresh-only` when supported, falling back to `terraform refresh` on older versions.
