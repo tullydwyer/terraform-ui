@@ -510,8 +510,7 @@ function renderGraph() {
   }
   cy.elements().remove();
   cy.add(elements);
-  const layoutName = (cytoscape.layout && cytoscape.layout.prototype && cytoscape.layout.prototype.run && cytoscape.prototype.layouts) ? 'cose-bilkent' : 'cose';
-  cy.layout({ name: layoutName, padding: 20, animate: false }).run();
+  applyBestLayout();
 
   if (!cyEventsBound) {
     cy.on('tap', 'node', (evt) => {
@@ -527,6 +526,59 @@ function renderGraph() {
     });
     cyEventsBound = true;
   }
+}
+
+function applyBestLayout() {
+  if (!cy) return;
+  const hasElk = !!(cy.layout && cytoscape && cytoscape.extensions && cytoscape.extensions('layout', 'elk'));
+  if (hasElk) {
+    cy.layout({
+      name: 'elk',
+      elk: {
+        algorithm: 'layered',
+        edgeRouting: 'ORTHOGONAL',
+        layeringStrategy: 'NETWORK_SIMPLEX',
+        'elk.direction': 'DOWN',
+        'spacing.nodeNode': 50,
+        'spacing.edgeNode': 30,
+        'spacing.edgeEdge': 20,
+      },
+      fit: true,
+      padding: 40,
+      animate: false,
+    }).run();
+  } else {
+    cy.layout({ name: 'breadthfirst', directed: true, spacingFactor: 1.3, padding: 40, animate: false }).run();
+  }
+  // If too many nodes share identical positions, run a second pass with cose to spread
+  if (isOverlapping()) {
+    cy.layout({
+      name: 'cose',
+      fit: true,
+      padding: 40,
+      animate: false,
+      nodeOverlap: 10,
+      nodeRepulsion: 8000,
+      idealEdgeLength: 120,
+      gravity: 0.8,
+      numIter: 700,
+    }).run();
+  }
+}
+
+function isOverlapping() {
+  const positions = new Map();
+  const nodes = cy.nodes();
+  if (nodes.length <= 2) return false;
+  nodes.forEach((n) => {
+    const p = n.position();
+    const key = `${Math.round(p.x / 10)}:${Math.round(p.y / 10)}`; // bucketed positions
+    positions.set(key, (positions.get(key) || 0) + 1);
+  });
+  let maxBucket = 0;
+  positions.forEach((count) => { if (count > maxBucket) maxBucket = count; });
+  // If any bucket contains more than 20% of nodes, treat as overlapping
+  return maxBucket / nodes.length > 0.2;
 }
 
 function collapseExpandModules(collapse) {
