@@ -11,8 +11,8 @@
     <header class="app-header">
       <div class="brand">Terraform UI</div>
       <div class="workspace">
-        <button id="btn-open-workspace" title="Open Terraform workspace">Open Workspace</button>
-        <span id="workspace-path" class="workspace-path">No workspace selected</span>
+        <button id="btn-open-workspace" title="Open Terraform workspace">Open</button>
+        <span id="workspace-path" class="workspace-path" title="Current workspace path">No workspace selected</span>
         <label for="tf-workspace-select" class="muted" title="Terraform workspace">WS</label>
         <select id="tf-workspace-select" title="Select Terraform workspace"></select>
         <details id="tfvars-box" class="tfvars-box" title="Select *.tfvars files for commands">
@@ -36,6 +36,7 @@
         <div class="panel-title">Resources</div>
         <ul id="resources-list" class="resources-list"></ul>
       </aside>
+      <div id="resizer-sidebar" class="resizer resizer-vertical" title="Drag to resize sidebar"></div>
       <section class="content">
         <div class="tabs">
           <button id="tab-inspect" class="tab active">Inspect</button>
@@ -64,8 +65,15 @@
           </div>
         </div>
 
+        <div id="resizer-logs" class="resizer resizer-horizontal" title="Drag to resize logs"></div>
+
         <div class="logs">
-          <div class="panel-title">Logs</div>
+          <div class="panel-title row">
+            <span>Logs</span>
+            <div class="logs-controls">
+              <button id="btn-toggle-logs" class="icon-btn" aria-expanded="true" title="Collapse/Expand logs">▾</button>
+            </div>
+          </div>
           <pre id="logs-pre" class="logs-pre"></pre>
         </div>
       </section>

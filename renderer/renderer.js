@@ -19,6 +19,8 @@ const ui = {
   tabGraph: document.getElementById('tab-graph'),
   graphPanel: document.getElementById('graph-panel'),
   graphArea: document.getElementById('graph-area'),
+  resizerSidebar: document.getElementById('resizer-sidebar'),
+  resizerLogs: document.getElementById('resizer-logs'),
   // Cytoscape graph container is #cy
   contextMenu: document.getElementById('context-menu'),
   // Rename modal
@@ -35,6 +37,7 @@ const ui = {
   importAddr: document.getElementById('import-addr'),
   importId: document.getElementById('import-id'),
   btnImport: document.getElementById('btn-import'),
+  btnToggleLogs: document.getElementById('btn-toggle-logs'),
 };
 
 let state = {
@@ -46,6 +49,8 @@ let state = {
   snapshotAt: null, // ISO string when terraform state was last pulled
   terraformWorkspaces: { list: [], current: '' },
   selectedVarFiles: new Set(),
+  sidebarWidthPx: 320,
+  logsHeightPct: 40,
 };
 
 let cy = null;
@@ -90,6 +95,22 @@ function normalizeRefToAddress(ref) {
 
 function isGraphActive() {
   return !ui.graphPanel.classList.contains('hidden');
+}
+
+function updateLayoutSizes() {
+  const root = document.querySelector('.layout');
+  if (root) {
+    const w = Math.max(220, Math.min(state.sidebarWidthPx, Math.floor(window.innerWidth * 0.6)));
+    root.style.setProperty('--sidebar-width', w + 'px');
+    const pct = Math.max(15, Math.min(state.logsHeightPct, 80));
+    root.style.setProperty('--logs-height', pct + '%');
+  }
+  if (cy) {
+    setTimeout(() => {
+      cy.resize();
+      applyBestLayout();
+    }, 0);
+  }
 }
 
 function getModulePrefixFromAddress(address) {
@@ -1067,6 +1088,65 @@ function wireEvents() {
   if (relayoutBtn) relayoutBtn.addEventListener('click', () => applyBestLayout());
   wireContextMenu();
 
+  // Logs collapse
+  if (ui.btnToggleLogs) {
+    ui.btnToggleLogs.addEventListener('click', () => {
+      const logs = document.querySelector('.logs');
+      const expanded = ui.btnToggleLogs.getAttribute('aria-expanded') !== 'false';
+      if (expanded) {
+        ui.btnToggleLogs.textContent = '▸';
+        ui.btnToggleLogs.setAttribute('aria-expanded', 'false');
+        logs.classList.add('collapsed');
+        state.logsHeightPct = 0; // visually collapsed
+      } else {
+        ui.btnToggleLogs.textContent = '▾';
+        ui.btnToggleLogs.setAttribute('aria-expanded', 'true');
+        logs.classList.remove('collapsed');
+        if (state.logsHeightPct < 15) state.logsHeightPct = 30;
+      }
+      updateLayoutSizes();
+    });
+  }
+
+  // Sidebar resizer drag
+  if (ui.resizerSidebar) {
+    let dragging = false;
+    const onMove = (ev) => {
+      if (!dragging) return;
+      const x = ev.touches ? ev.touches[0].clientX : ev.clientX;
+      state.sidebarWidthPx = Math.max(220, Math.min(x, window.innerWidth - 300));
+      updateLayoutSizes();
+      ev.preventDefault();
+    };
+    const onUp = () => { dragging = false; window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp); window.removeEventListener('touchmove', onMove); window.removeEventListener('touchend', onUp); };
+    ui.resizerSidebar.addEventListener('mousedown', () => { dragging = true; window.addEventListener('mousemove', onMove, { passive: false }); window.addEventListener('mouseup', onUp); });
+    ui.resizerSidebar.addEventListener('touchstart', () => { dragging = true; window.addEventListener('touchmove', onMove, { passive: false }); window.addEventListener('touchend', onUp); });
+  }
+
+  // Logs resizer drag (vertical)
+  if (ui.resizerLogs) {
+    let draggingV = false;
+    const onMoveV = (ev) => {
+      if (!draggingV) return;
+      const y = ev.touches ? ev.touches[0].clientY : ev.clientY;
+      const content = document.querySelector('.content');
+      const rect = content.getBoundingClientRect();
+      const fromTop = y - rect.top;
+      const pct = Math.round(((rect.height - fromTop) / rect.height) * 100);
+      state.logsHeightPct = Math.max(15, Math.min(pct, 80));
+      const logs = document.querySelector('.logs');
+      logs.classList.remove('collapsed');
+      if (ui.btnToggleLogs) { ui.btnToggleLogs.textContent = '▾'; ui.btnToggleLogs.setAttribute('aria-expanded', 'true'); }
+      updateLayoutSizes();
+      ev.preventDefault();
+    };
+    const onUpV = () => { draggingV = false; window.removeEventListener('mousemove', onMoveV); window.removeEventListener('mouseup', onUpV); window.removeEventListener('touchmove', onMoveV); window.removeEventListener('touchend', onUpV); };
+    ui.resizerLogs.addEventListener('mousedown', () => { draggingV = true; window.addEventListener('mousemove', onMoveV, { passive: false }); window.addEventListener('mouseup', onUpV); });
+    ui.resizerLogs.addEventListener('touchstart', () => { draggingV = true; window.addEventListener('touchmove', onMoveV, { passive: false }); window.addEventListener('touchend', onUpV); });
+  }
+
+  window.addEventListener('resize', updateLayoutSizes);
+
   // Toast: show friendly label (not the full command) from main process queue events
   if (window.api && typeof window.api.onCommand === 'function') {
     window.api.onCommand((payload) => {
@@ -1131,6 +1211,7 @@ function wireEvents() {
 
 async function boot() {
   wireEvents();
+  updateLayoutSizes();
   const saved = await window.api.getWorkspace();
   if (saved) {
     setWorkspace(saved);
