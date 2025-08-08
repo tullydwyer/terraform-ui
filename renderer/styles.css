@@ -32,6 +32,12 @@ body {
 .workspace-path {
   color: var(--muted); font-size: 12px; max-width: 700px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
+.workspace select { background: #111117; color: var(--text); border: 1px solid var(--border); border-radius: 6px; padding: 4px 6px; }
+.workspace .muted { color: var(--muted); font-size: 12px; }
+.tfvars-box { border: 1px solid var(--border); border-radius: 6px; padding: 2px 6px; background: #12121a; }
+.tfvars-list { display: grid; grid-template-columns: repeat(3, minmax(180px, 1fr)); gap: 6px; padding: 6px 2px 2px; max-height: 220px; overflow: auto; }
+.tfvars-list .tfvar-item { display: flex; align-items: center; gap: 6px; font-size: 12px; }
+.tfvars-list .tfvar-path { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .snapshot-indicator {
   color: var(--muted);
   font-size: 12px;

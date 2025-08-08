@@ -3,6 +3,9 @@ const ui = {
   workspacePath: document.getElementById('workspace-path'),
   snapshotIndicator: document.getElementById('snapshot-indicator'),
   spinner: document.getElementById('global-spinner'),
+  tfWorkspaceSelect: document.getElementById('tf-workspace-select'),
+  tfvarsBox: document.getElementById('tfvars-box'),
+  tfvarsList: document.getElementById('tfvars-list'),
   btnInit: document.getElementById('btn-init'),
   btnPlan: document.getElementById('btn-plan'),
   btnRefresh: document.getElementById('btn-refresh'),
@@ -42,6 +45,8 @@ let state = {
   graph: { nodes: [], edges: [] },
   graphPositions: new Map(), // address -> {x,y}
   snapshotAt: null, // ISO string when terraform state was last pulled
+  terraformWorkspaces: { list: [], current: '' },
+  selectedVarFiles: new Set(),
 };
 
 let cy = null;
@@ -114,6 +119,11 @@ function makeScopedVarId(varRef, modulePrefix) {
 function setWorkspace(cwd) {
   state.cwd = cwd || '';
   ui.workspacePath.textContent = cwd || 'No workspace selected';
+  // Reset selections on workspace change
+  state.selectedVarFiles = new Set();
+  state.terraformWorkspaces = { list: [], current: '' };
+  renderTfvarsList();
+  renderWorkspaceDropdown();
 }
 
 function formatRelativeTime(iso) {
@@ -159,7 +169,7 @@ async function pickWorkspace() {
   if (path) {
     await window.api.setWorkspace(path);
     setWorkspace(path);
-    await refreshResources();
+    await afterWorkspaceChanged();
   }
 }
 
@@ -168,6 +178,104 @@ function appendLog({ stream, message }) {
   ui.logsPre.textContent += prefix + message;
   ui.logsPre.scrollTop = ui.logsPre.scrollHeight;
 }
+function renderWorkspaceDropdown() {
+  const sel = ui.tfWorkspaceSelect;
+  if (!sel) return;
+  sel.innerHTML = '';
+  if (!state.cwd) {
+    const opt = document.createElement('option');
+    opt.textContent = '—';
+    opt.value = '';
+    sel.appendChild(opt);
+    sel.disabled = true;
+    return;
+  }
+  sel.disabled = false;
+  const { list, current } = state.terraformWorkspaces;
+  if (!list || list.length === 0) {
+    const opt = document.createElement('option');
+    opt.textContent = '(default)';
+    opt.value = 'default';
+    sel.appendChild(opt);
+    sel.value = 'default';
+    return;
+  }
+  for (const name of list) {
+    const opt = document.createElement('option');
+    opt.value = name;
+    opt.textContent = name;
+    sel.appendChild(opt);
+  }
+  sel.value = current || 'default';
+}
+
+function renderTfvarsList() {
+  const container = ui.tfvarsList;
+  if (!container) return;
+  container.innerHTML = '';
+  if (!state.cwd) {
+    container.textContent = 'No workspace selected';
+    return;
+  }
+  const items = state.availableTfvars || [];
+  if (!items.length) {
+    container.textContent = 'No *.tfvars found';
+    return;
+  }
+  items.forEach((filePath) => {
+    const row = document.createElement('label');
+    row.className = 'tfvar-item';
+    const cb = document.createElement('input');
+    cb.type = 'checkbox';
+    cb.checked = state.selectedVarFiles.has(filePath);
+    cb.addEventListener('change', () => {
+      if (cb.checked) state.selectedVarFiles.add(filePath);
+      else state.selectedVarFiles.delete(filePath);
+    });
+    const span = document.createElement('span');
+    span.className = 'tfvar-path';
+    span.title = filePath;
+    // Show path relative to cwd for readability
+    let rel = filePath;
+    try {
+      if (state.cwd && filePath.startsWith(state.cwd)) rel = filePath.slice(state.cwd.length + 1);
+    } catch (_) {}
+    span.textContent = rel;
+    row.appendChild(cb);
+    row.appendChild(span);
+    container.appendChild(row);
+  });
+}
+
+function getSelectedVarFilesArray() {
+  return Array.from(state.selectedVarFiles);
+}
+
+async function refreshWorkspaceMeta() {
+  if (!state.cwd) return;
+  // Workspaces
+  try {
+    const res = await window.api.listWorkspaces(state.cwd);
+    state.terraformWorkspaces = { list: res.workspaces || [], current: res.current || '' };
+  } catch (_) {
+    state.terraformWorkspaces = { list: [], current: '' };
+  }
+  renderWorkspaceDropdown();
+  // Tfvars
+  try {
+    const res = await window.api.listTfvars(state.cwd);
+    state.availableTfvars = (res && res.files) || [];
+  } catch (_) {
+    state.availableTfvars = [];
+  }
+  renderTfvarsList();
+}
+
+async function afterWorkspaceChanged() {
+  await refreshWorkspaceMeta();
+  await refreshResources();
+}
+
 
 function clearLogs() {
   ui.logsPre.textContent = '';
@@ -289,7 +397,8 @@ async function doInit() {
 
 async function doPlan() {
   if (!(await ensureWorkspaceSelected())) return;
-  await withLogs(() => window.api.plan(state.cwd));
+  const varFiles = getSelectedVarFilesArray();
+  await withLogs(() => window.api.plan(state.cwd, { varFiles }));
   // Rebuild from plan-json to immediately reflect planned graph
   await buildGraph();
   if (isGraphActive()) renderGraph();
@@ -297,14 +406,16 @@ async function doPlan() {
 
 async function doApply() {
   if (!(await ensureWorkspaceSelected())) return;
-  await withLogs(() => window.api.apply(state.cwd));
+  const varFiles = getSelectedVarFilesArray();
+  await withLogs(() => window.api.apply(state.cwd, { varFiles }));
   await refreshResources();
   if (isGraphActive()) renderGraph();
 }
 
 async function doRefresh() {
   if (!(await ensureWorkspaceSelected())) return;
-  await withLogs(() => window.api.refresh(state.cwd));
+  const varFiles = getSelectedVarFilesArray();
+  await withLogs(() => window.api.refresh(state.cwd, { varFiles }));
   await refreshResources();
   if (isGraphActive()) renderGraph();
 }
@@ -313,7 +424,8 @@ async function doDestroy() {
   if (!(await ensureWorkspaceSelected())) return;
   const ok = confirm('Are you sure you want to destroy all managed infrastructure?');
   if (!ok) return;
-  await withLogs(() => window.api.destroy(state.cwd));
+  const varFiles = getSelectedVarFilesArray();
+  await withLogs(() => window.api.destroy(state.cwd, { varFiles }));
   await refreshResources();
   if (isGraphActive()) renderGraph();
 }
@@ -373,10 +485,11 @@ function activateTab(which) {
 
 async function buildGraph() {
   // Use terraform show -json and plan -json to build a combined graph
+  const varFiles = getSelectedVarFilesArray();
   const [sj, pj, pg] = await callWithSpinner(() => Promise.all([
     window.api.showJson(state.cwd),
-    window.api.planJson(state.cwd),
-    window.api.planGraphDot(state.cwd),
+    window.api.planJson(state.cwd, { varFiles }),
+    window.api.planGraphDot(state.cwd, { varFiles }),
   ]));
   if (sj && sj.snapshotAt) {
     // Prefer the most recent snapshot timestamp we see
@@ -874,6 +987,15 @@ function wireContextMenu() {
 
 function wireEvents() {
   ui.btnOpenWorkspace.addEventListener('click', pickWorkspace);
+  if (ui.tfWorkspaceSelect) {
+    ui.tfWorkspaceSelect.addEventListener('change', async () => {
+      const name = ui.tfWorkspaceSelect.value;
+      if (!state.cwd || !name) return;
+      await withLogs(() => window.api.selectWorkspaceName(state.cwd, name));
+      await refreshWorkspaceMeta();
+      await refreshResources();
+    });
+  }
   ui.btnInit.addEventListener('click', doInit);
   ui.btnPlan.addEventListener('click', doPlan);
   ui.btnApply.addEventListener('click', doApply);
@@ -959,7 +1081,7 @@ async function boot() {
   const saved = await window.api.getWorkspace();
   if (saved) {
     setWorkspace(saved);
-    await refreshResources();
+    await afterWorkspaceChanged();
   }
 }
 

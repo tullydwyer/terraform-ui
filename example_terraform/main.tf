@@ -5,8 +5,8 @@ module "example" {
 }
 
 resource "local_file" "file_1" {
-  content  = "${local.environment}_name_1"
-  filename = "out/${local.environment}_root_file_1.bar"
+  content  = "${var.myname}_name_1"
+  filename = "out/${var.myname}_root_file_1.bar"
 }
 
 resource "local_file" "file_2" {
@@ -14,7 +14,7 @@ resource "local_file" "file_2" {
   filename = "out/${local.environment}_root_file_2.bar"
 }
 
-# resource "local_file" "file_3" {
-#   content  = "${local.environment}_name_3"
-#   filename = "out/${local.environment}_root_file_3.bar"
-# }
+resource "local_file" "file_3" {
+  content  = "${local.environment}_name_3"
+  filename = "out/${local.environment}_root_file_3.bar"
+}
