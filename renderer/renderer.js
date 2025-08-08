@@ -138,6 +138,12 @@ function renderResources() {
       state.selectedAddress = addr;
       await loadResourceDetails(addr);
     });
+    li.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+      const x = e.pageX || (e.clientX + window.scrollX);
+      const y = e.pageY || (e.clientY + window.scrollY);
+      showContextMenu(x, y, addr);
+    });
     ui.resourcesList.appendChild(li);
   });
 }
