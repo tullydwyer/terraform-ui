@@ -175,7 +175,8 @@ async function pickWorkspace() {
 
 function appendLog({ stream, message }) {
   const prefix = stream === 'stderr' ? '[err] ' : '';
-  ui.logsPre.textContent += prefix + message;
+  const html = ansiToHtml(prefix + String(message || ''));
+  ui.logsPre.insertAdjacentHTML('beforeend', html);
   ui.logsPre.scrollTop = ui.logsPre.scrollHeight;
 }
 function renderWorkspaceDropdown() {
@@ -281,6 +282,75 @@ function clearLogs() {
   ui.logsPre.textContent = '';
 }
 
+// Basic ANSI SGR to HTML converter for logs
+function ansiToHtml(text) {
+  if (!text) return '';
+  const escape = (s) => s
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+
+  const classesForCode = (code) => {
+    const n = Number(code);
+    switch (n) {
+      case 0: return ['reset'];
+      case 1: return ['ansi-bold'];
+      case 2: return ['ansi-dim'];
+      case 4: return ['ansi-underline'];
+      case 30: return ['ansi-fg-black'];
+      case 31: return ['ansi-fg-red'];
+      case 32: return ['ansi-fg-green'];
+      case 33: return ['ansi-fg-yellow'];
+      case 34: return ['ansi-fg-blue'];
+      case 35: return ['ansi-fg-magenta'];
+      case 36: return ['ansi-fg-cyan'];
+      case 37: return ['ansi-fg-white'];
+      case 90: return ['ansi-fg-bright-black'];
+      case 91: return ['ansi-fg-bright-red'];
+      case 92: return ['ansi-fg-bright-green'];
+      case 93: return ['ansi-fg-bright-yellow'];
+      case 94: return ['ansi-fg-bright-blue'];
+      case 95: return ['ansi-fg-bright-magenta'];
+      case 96: return ['ansi-fg-bright-cyan'];
+      case 97: return ['ansi-fg-bright-white'];
+      default: return [];
+    }
+  };
+
+  const segments = [];
+  const closeStack = [];
+  let i = 0;
+  while (i < text.length) {
+    const escIdx = text.indexOf('\u001b[', i);
+    if (escIdx === -1) {
+      segments.push(escape(text.slice(i)));
+      break;
+    }
+    if (escIdx > i) segments.push(escape(text.slice(i, escIdx)));
+    const mIdx = text.indexOf('m', escIdx + 2);
+    if (mIdx === -1) {
+      segments.push(escape(text.slice(escIdx)));
+      break;
+    }
+    const seq = text.slice(escIdx + 2, mIdx);
+    const codes = seq.split(';').filter((s) => s.length > 0);
+    if (codes.includes('0')) {
+      while (closeStack.length) segments.push(closeStack.pop());
+    }
+    for (const c of codes) {
+      if (c === '0') continue;
+      const cls = classesForCode(c);
+      if (cls.length) {
+        segments.push(`<span class="${cls.join(' ')}">`);
+        closeStack.push('</span>');
+      }
+    }
+    i = mIdx + 1;
+  }
+  while (closeStack.length) segments.push(closeStack.pop());
+  return segments.join('');
+}
+
 async function withLogs(task) {
   clearLogs();
   const unsubscribe = window.api.onLog(appendLog);
@@ -288,7 +358,8 @@ async function withLogs(task) {
   try {
     const result = await task();
     if (result && typeof result.code !== 'undefined') {
-      ui.logsPre.textContent += `\n[exit code ${result.code}]\n`;
+      const html = ansiToHtml(`\n[exit code ${result.code}]\n`);
+      ui.logsPre.insertAdjacentHTML('beforeend', html);
     }
     return result;
   } finally {

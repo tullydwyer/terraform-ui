@@ -271,22 +271,22 @@ ipcMain.handle('openExternal', async (_event, url) => {
 
 // Terraform commands
 ipcMain.handle('terraform:init', async (_e, cwd) => {
-  return withTerraformQueue('init', cwd, () => runTerraformStreamed(cwd, ['init', '-input=false', '-no-color']));
+  return withTerraformQueue('init', cwd, () => runTerraformStreamed(cwd, ['init', '-input=false']));
 });
 
 ipcMain.handle('terraform:plan', async (_e, cwd, options) => {
   const varArgs = buildVarFileArgs(options && options.varFiles);
-  return withTerraformQueue('plan', cwd, () => runTerraformStreamed(cwd, ['plan', '-no-color', ...varArgs]));
+  return withTerraformQueue('plan', cwd, () => runTerraformStreamed(cwd, ['plan', ...varArgs]));
 });
 
 ipcMain.handle('terraform:apply', async (_e, cwd, options) => {
   const varArgs = buildVarFileArgs(options && options.varFiles);
-  return withTerraformQueue('apply', cwd, () => runTerraformStreamed(cwd, ['apply', '-auto-approve', '-no-color', ...varArgs]));
+  return withTerraformQueue('apply', cwd, () => runTerraformStreamed(cwd, ['apply', '-auto-approve', ...varArgs]));
 });
 
 ipcMain.handle('terraform:destroy', async (_e, cwd, options) => {
   const varArgs = buildVarFileArgs(options && options.varFiles);
-  return withTerraformQueue('destroy', cwd, () => runTerraformStreamed(cwd, ['destroy', '-auto-approve', '-no-color', ...varArgs]));
+  return withTerraformQueue('destroy', cwd, () => runTerraformStreamed(cwd, ['destroy', '-auto-approve', ...varArgs]));
 });
 
 ipcMain.handle('terraform:refresh', async (_e, cwd, options) => {
@@ -294,9 +294,9 @@ ipcMain.handle('terraform:refresh', async (_e, cwd, options) => {
   return withTerraformQueue('refresh', cwd, async () => {
     const supportsRefreshOnly = await detectRefreshOnlySupport(cwd);
     if (supportsRefreshOnly) {
-      return runTerraformStreamed(cwd, ['apply', '-refresh-only', '-auto-approve', '-no-color', ...varArgs]);
+      return runTerraformStreamed(cwd, ['apply', '-refresh-only', '-auto-approve', ...varArgs]);
     }
-    return runTerraformStreamed(cwd, ['refresh', '-no-color', ...varArgs]);
+    return runTerraformStreamed(cwd, ['refresh', ...varArgs]);
   });
 });
 
@@ -324,7 +324,7 @@ ipcMain.handle('terraform:state:list', async (_e, cwd) => {
 });
 
 ipcMain.handle('terraform:state:show', async (_e, cwd, address) => {
-  return withTerraformQueue('state show', cwd, () => runTerraformStreamed(cwd, ['state', 'show', '-no-color', address]));
+  return withTerraformQueue('state show', cwd, () => runTerraformStreamed(cwd, ['state', 'show', address]));
 });
 
 ipcMain.handle('terraform:show:json', async (_e, cwd) => {
@@ -375,7 +375,7 @@ ipcMain.handle('terraform:plan:json', async (_e, cwd, options) => {
     const tmpName = `tfplan-ui-${Date.now()}.bin`;
     const tmpPath = path.join(cwd, tmpName);
     const varArgs = buildVarFileArgs(options && options.varFiles);
-    const planRes = await runTerraformStreamed(cwd, ['plan', '-input=false', '-no-color', `-out=${tmpName}`, ...varArgs]);
+    const planRes = await runTerraformStreamed(cwd, ['plan', '-input=false', `-out=${tmpName}`, ...varArgs]);
     if (planRes.code !== 0) {
       // best-effort cleanup
       try { fs.unlinkSync(tmpPath); } catch (_) {}
@@ -398,7 +398,7 @@ ipcMain.handle('terraform:graph:plan', async (_e, cwd, options) => {
     const tmpName = `tfplan-ui-${Date.now()}.bin`;
     const tmpPath = path.join(cwd, tmpName);
     const varArgs = buildVarFileArgs(options && options.varFiles);
-    const planRes = await runTerraformStreamed(cwd, ['plan', '-input=false', '-no-color', `-out=${tmpName}`, ...varArgs]);
+    const planRes = await runTerraformStreamed(cwd, ['plan', '-input=false', `-out=${tmpName}`, ...varArgs]);
     if (planRes.code !== 0) {
       try { fs.unlinkSync(tmpPath); } catch (_) {}
       return { ...planRes, dot: '' };

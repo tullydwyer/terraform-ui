@@ -161,6 +161,27 @@ button.danger { background: #7f1d1d; border-color: #6b1616; }
   padding: 6px 8px;
 }
 
+/* ANSI color classes for logs */
+.ansi-bold { font-weight: 700; }
+.ansi-dim { opacity: 0.8; }
+.ansi-underline { text-decoration: underline; }
+.ansi-fg-black { color: #000000; }
+.ansi-fg-red { color: #ef4444; }
+.ansi-fg-green { color: #10b981; }
+.ansi-fg-yellow { color: #f59e0b; }
+.ansi-fg-blue { color: #3b82f6; }
+.ansi-fg-magenta { color: #d946ef; }
+.ansi-fg-cyan { color: #06b6d4; }
+.ansi-fg-white { color: #e5e7eb; }
+.ansi-fg-bright-black { color: #6b7280; }
+.ansi-fg-bright-red { color: #f87171; }
+.ansi-fg-bright-green { color: #34d399; }
+.ansi-fg-bright-yellow { color: #fbbf24; }
+.ansi-fg-bright-blue { color: #60a5fa; }
+.ansi-fg-bright-magenta { color: #f0abfc; }
+.ansi-fg-bright-cyan { color: #67e8f9; }
+.ansi-fg-bright-white { color: #ffffff; }
+
 .graph-panel { height: 60%; padding: 12px; }
 .graph-panel.hidden { display: none; }
 .graph-area { position: relative; width: 100%; height: calc(100% - 28px); background: #0f1117; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
