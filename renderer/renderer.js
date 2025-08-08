@@ -141,6 +141,7 @@ function renderResources() {
     if (change === 'create') marker = '+';
     else if (change === 'delete') marker = '-';
     else if (change === 'modify') marker = '~';
+    else if (change === 'replace') marker = '-/+';
     li.classList.add(`change-${change || 'none'}`);
     li.innerHTML = `
       <span class="marker">${marker || ''}</span>
@@ -174,6 +175,7 @@ function renderResources() {
     if (change === 'create') marker = '+';
     else if (change === 'delete') marker = '-';
     else if (change === 'modify') marker = '~';
+    else if (change === 'replace') marker = '-/+';
     li.classList.add(`change-${change || 'none'}`);
     li.innerHTML = `
       <span class="marker">${marker || ''}</span>
@@ -337,7 +339,8 @@ async function buildGraph() {
       const hasCreate = actions.includes('create');
       const hasDelete = actions.includes('delete');
       const hasUpdate = actions.includes('update');
-      if ((hasCreate && hasDelete) || hasUpdate) change = 'modify';
+      if (hasCreate && hasDelete) change = 'replace';
+      else if (hasUpdate) change = 'modify';
       else if (hasCreate) change = 'create';
       else if (hasDelete) change = 'delete';
       if (change) changeBy.set(addr, change);
@@ -556,7 +559,8 @@ function renderGraph() {
         { selector: 'edge', style: { 'curve-style': 'bezier', 'target-arrow-shape': 'triangle', 'line-color': '#6b7280', 'target-arrow-color': '#6b7280', 'width': 1 } },
         { selector: 'node[change = "create"]', style: { 'color': '#10b981', 'border-color': '#10b981' } },
         { selector: 'node[change = "delete"]', style: { 'color': '#ef4444', 'border-color': '#ef4444' } },
-        { selector: 'node[change = "modify"]', style: { 'color': '#f59e0b', 'border-color': '#f59e0b' } }
+        { selector: 'node[change = "modify"]', style: { 'color': '#f59e0b', 'border-color': '#f59e0b' } },
+        { selector: 'node[change = "replace"]', style: { 'color': '#f59e0b', 'border-color': '#ef4444' } }
       ]
     });
   }
@@ -569,6 +573,7 @@ function renderGraph() {
     if (change === 'create') prefix = '+ ';
     else if (change === 'delete') prefix = '- ';
     else if (change === 'modify') prefix = '~ ';
+    else if (change === 'replace') prefix = '-/+ ';
     const ele = { data: { id: n.id, label: prefix + n.id, type: n.type || 'resource', planned: String(Boolean(n.planned)), change } };
     if (n.type !== 'module') {
       const parent = getModulePrefixFromAddress(n.id);
