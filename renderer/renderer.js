@@ -662,9 +662,7 @@ async function buildGraph() {
     if (showJson && showJson.values && showJson.values.root_module) collect(showJson.values.root_module);
     // Edges from planned state
     if (planJson && planJson.planned_values && planJson.planned_values.root_module) collect(planJson.planned_values.root_module);
-  } catch (_) {
-    // fallback no edges
-  }
+  } catch (_) {}
 
   // Also walk configuration tree to gather inputs and module/variable scoping
   try {
@@ -737,7 +735,9 @@ async function buildGraph() {
   try {
     const dotEdges = parseDotEdges(planDot, nodeIds);
     for (const de of dotEdges) edges.push({ from: baseAddress(de.from), to: baseAddress(de.to) });
-  } catch (_) {}
+  } catch (_) {
+    // ignore parsing fallback
+  }
 
   // Ensure we have nodes for all module/variable endpoints referenced by edges (including module.<path>.var.<name>)
   for (const { from, to } of edges) {
@@ -770,19 +770,7 @@ async function buildGraph() {
   if (isGraphActive()) renderGraph();
 }
 
-function ensureNode(addr) {
-  const key = baseAddress(addr);
-  if (!key) return { id: addr, inputs: new Set(), outputs: new Set() };
-  let node = null;
-  for (const n of state.graph.nodes) {
-    if (n.id === key) { node = n; break; }
-  }
-  if (!node) {
-    node = { id: key, planned: false, inputs: new Set(), outputs: new Set() };
-    state.graph.nodes.push(node);
-  }
-  return node;
-}
+// (legacy helper removed)
 
 function parseDotEdges(dot, nodeIds) {
   if (!dot) return [];
@@ -971,27 +959,7 @@ function collapseExpandModules(collapse) {
   if (pending === 0) applyBestLayout();
 }
 
-function enableDrag(el, address) {
-  let dragging = false; let startX = 0; let startY = 0; let orig = { x: 0, y: 0 };
-  el.addEventListener('mousedown', (ev) => {
-    if (ev.button !== 0) return; // only left
-    dragging = true;
-    startX = ev.clientX; startY = ev.clientY;
-    const p = state.graphPositions.get(address) || { x: 0, y: 0 };
-    orig = { ...p };
-    document.body.style.userSelect = 'none';
-  });
-  window.addEventListener('mousemove', (ev) => {
-    if (!dragging) return;
-    const dx = ev.clientX - startX; const dy = ev.clientY - startY;
-    const np = { x: orig.x + dx, y: orig.y + dy };
-    state.graphPositions.set(address, np);
-    el.style.left = np.x + 'px';
-    el.style.top = np.y + 'px';
-    renderEdges(); // update edges while dragging
-  });
-  window.addEventListener('mouseup', () => { dragging = false; document.body.style.userSelect = ''; renderEdges(); });
-}
+// (legacy drag helper removed)
 
 function showContextMenu(x, y, address) {
   ui.contextMenu.style.left = x + 'px';

@@ -352,8 +352,8 @@ ipcMain.handle('terraform:show:json', async (_e, cwd) => {
     }
     const showRes = await runTerraformStreamed(cwd, ['show', '-json', tmpPath]);
     let json = null;
-    try { json = JSON.parse(showRes.stdout); } catch (_) {}
-    try { fs.unlinkSync(tmpPath); } catch (_) {}
+    try { json = JSON.parse(showRes.stdout); } catch (_) { /* ignore parse failure */ }
+    try { fs.unlinkSync(tmpPath); } catch (_) { /* ignore unlink failure */ }
     return { ...showRes, json, snapshotAt };
   });
 });
@@ -378,7 +378,7 @@ ipcMain.handle('terraform:plan:json', async (_e, cwd, options) => {
     const planRes = await runTerraformStreamed(cwd, ['plan', '-input=false', `-out=${tmpName}`, ...varArgs]);
     if (planRes.code !== 0) {
       // best-effort cleanup
-      try { fs.unlinkSync(tmpPath); } catch (_) {}
+      try { fs.unlinkSync(tmpPath); } catch (_) { /* ignore unlink failure */ }
       return { ...planRes, json: null };
     }
     const showRes = await runTerraformStreamed(cwd, ['show', '-json', tmpName]);
@@ -388,7 +388,7 @@ ipcMain.handle('terraform:plan:json', async (_e, cwd, options) => {
     } catch (_) {
       // ignore
     }
-    try { fs.unlinkSync(tmpPath); } catch (_) {}
+    try { fs.unlinkSync(tmpPath); } catch (_) { /* ignore unlink failure */ }
     return { ...showRes, json };
   });
 });
@@ -400,11 +400,11 @@ ipcMain.handle('terraform:graph:plan', async (_e, cwd, options) => {
     const varArgs = buildVarFileArgs(options && options.varFiles);
     const planRes = await runTerraformStreamed(cwd, ['plan', '-input=false', `-out=${tmpName}`, ...varArgs]);
     if (planRes.code !== 0) {
-      try { fs.unlinkSync(tmpPath); } catch (_) {}
+      try { fs.unlinkSync(tmpPath); } catch (_) { /* ignore unlink failure */ }
       return { ...planRes, dot: '' };
     }
     const graphRes = await runTerraformStreamed(cwd, ['graph', `-plan=${tmpName}`, '-draw-cycles']);
-    try { fs.unlinkSync(tmpPath); } catch (_) {}
+    try { fs.unlinkSync(tmpPath); } catch (_) { /* ignore unlink failure */ }
     return { ...graphRes, dot: graphRes.stdout };
   });
 });

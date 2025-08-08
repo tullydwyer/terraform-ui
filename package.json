@@ -8,15 +8,16 @@
   "scripts": {
     "start": "electron .",
     "clean": "rimraf dist",
-    "postinstall": ""
+    "postinstall": "",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix"
   },
   "engines": {
     "node": ">=18.0.0"
   },
   "devDependencies": {
     "electron": "^30.0.0",
+    "eslint": "^8.57.0",
     "rimraf": "^5.0.10"
   }
 }
-
-

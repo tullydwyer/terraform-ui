@@ -1,0 +1,32 @@
+{
+  "root": true,
+  "env": {
+    "es2022": true
+  },
+  "extends": [
+    "eslint:recommended"
+  ],
+  "parserOptions": {
+    "ecmaVersion": 2022,
+    "sourceType": "script"
+  },
+  "rules": {
+    "no-unused-vars": ["warn", { "args": "after-used", "ignoreRestSiblings": true }],
+    "no-undef": "error",
+    "no-console": "off",
+    "no-empty": ["error", { "allowEmptyCatch": true }]
+  },
+  "overrides": [
+    {
+      "files": ["electron/**/*.js"],
+      "env": { "node": true, "es2022": true },
+      "parserOptions": { "sourceType": "script" }
+    },
+    {
+      "files": ["renderer/**/*.js"],
+      "env": { "browser": true, "es2022": true },
+      "globals": { "cytoscape": "readonly" }
+    }
+  ]
+}
+

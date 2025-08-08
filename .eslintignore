@@ -1,0 +1,7 @@
+node_modules/
+dist/
+.terraform/
+**/.terraform/**
+**/*.tfstate
+**/*.tfstate.backup
+
