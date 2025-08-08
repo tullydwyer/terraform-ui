@@ -26,13 +26,12 @@ const ui = {
   renameInput: document.getElementById('rename-input'),
   btnRenameOk: document.getElementById('btn-rename-ok'),
   btnRenameCancel: document.getElementById('btn-rename-cancel'),
-  // Refactor
+  // (state refactor/import controls removed from Inspect tab)
   mvSrc: document.getElementById('mv-src'),
   mvDst: document.getElementById('mv-dst'),
   btnStateMv: document.getElementById('btn-state-mv'),
   rmAddr: document.getElementById('rm-addr'),
   btnStateRm: document.getElementById('btn-state-rm'),
-  // Import
   importAddr: document.getElementById('import-addr'),
   importId: document.getElementById('import-id'),
   btnImport: document.getElementById('btn-import'),
@@ -1042,9 +1041,9 @@ function wireEvents() {
   ui.btnApply.addEventListener('click', doApply);
   ui.btnRefresh.addEventListener('click', doRefresh);
   ui.btnDestroy.addEventListener('click', doDestroy);
-  ui.btnStateMv.addEventListener('click', doStateMove);
-  ui.btnStateRm.addEventListener('click', doStateRemove);
-  ui.btnImport.addEventListener('click', doImport);
+  if (ui.btnStateMv) ui.btnStateMv.addEventListener('click', doStateMove);
+  if (ui.btnStateRm) ui.btnStateRm.addEventListener('click', doStateRemove);
+  if (ui.btnImport) ui.btnImport.addEventListener('click', doImport);
   ui.tabInspect.addEventListener('click', () => activateTab('inspect'));
   ui.tabGraph.addEventListener('click', () => activateTab('graph'));
   const collapseBtn = document.getElementById('btn-collapse-modules');

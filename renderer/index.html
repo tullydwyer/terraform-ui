@@ -41,35 +41,10 @@
           <button id="tab-inspect" class="tab active">Inspect</button>
           <button id="tab-graph" class="tab">Graph</button>
         </div>
-        <div class="split">
+        <div class="split single">
           <div class="details">
             <div class="panel-title">Details</div>
             <pre id="resource-details" class="details-pre">Select a resource to view details</pre>
-          </div>
-          <div class="tools">
-            <div class="panel">
-              <div class="panel-title">State Refactor</div>
-              <div class="form-row">
-                <label>Move</label>
-                <input id="mv-src" placeholder="Source address (e.g. aws_instance.web)" />
-                <input id="mv-dst" placeholder="Destination address (e.g. aws_instance.web_new)" />
-                <button id="btn-state-mv">Move</button>
-              </div>
-              <div class="form-row">
-                <label>Remove</label>
-                <input id="rm-addr" placeholder="Address to remove" />
-                <button id="btn-state-rm" class="danger">Remove</button>
-              </div>
-            </div>
-
-            <div class="panel">
-              <div class="panel-title">Import Resource</div>
-              <div class="form-row">
-                <input id="import-addr" placeholder="Address (e.g. aws_instance.web)" />
-                <input id="import-id" placeholder="Provider-specific ID" />
-                <button id="btn-import">Import</button>
-              </div>
-            </div>
           </div>
         </div>
 

@@ -100,6 +100,9 @@ button.danger { background: #7f1d1d; border-color: #6b1616; }
   padding: 12px;
   height: 60%;
 }
+.split.single {
+  grid-template-columns: 1fr;
+}
 .details, .tools, .logs { background: transparent; }
 .panel { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 10px; }
 .panel + .panel { margin-top: 12px; }
