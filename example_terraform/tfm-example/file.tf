@@ -1,4 +1,4 @@
-resource "local_file" "example" {
+resource "local_file" "module_file" {
   content  = "foo!"
-  filename = "out/foo.bar"
+  filename = "out/${var.name}"
 }

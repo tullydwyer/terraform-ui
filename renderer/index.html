@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Terraform UI</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header class="app-header">
+      <div class="brand">Terraform UI</div>
+      <div class="workspace">
+        <button id="btn-open-workspace" title="Open Terraform workspace">Open Workspace</button>
+        <span id="workspace-path" class="workspace-path">No workspace selected</span>
+      </div>
+      <div class="actions">
+        <button id="btn-init">Init</button>
+        <button id="btn-plan">Plan</button>
+        <button id="btn-refresh">Refresh</button>
+        <button id="btn-apply" class="primary">Apply</button>
+        <button id="btn-destroy" class="danger">Destroy</button>
+      </div>
+    </header>
+
+    <main class="layout">
+      <aside class="sidebar">
+        <div class="panel-title">Resources</div>
+        <ul id="resources-list" class="resources-list"></ul>
+      </aside>
+      <section class="content">
+        <div class="split">
+          <div class="details">
+            <div class="panel-title">Details</div>
+            <pre id="resource-details" class="details-pre">Select a resource to view details</pre>
+          </div>
+          <div class="tools">
+            <div class="panel">
+              <div class="panel-title">State Refactor</div>
+              <div class="form-row">
+                <label>Move</label>
+                <input id="mv-src" placeholder="Source address (e.g. aws_instance.web)" />
+                <input id="mv-dst" placeholder="Destination address (e.g. aws_instance.web_new)" />
+                <button id="btn-state-mv">Move</button>
+              </div>
+              <div class="form-row">
+                <label>Remove</label>
+                <input id="rm-addr" placeholder="Address to remove" />
+                <button id="btn-state-rm" class="danger">Remove</button>
+              </div>
+            </div>
+
+            <div class="panel">
+              <div class="panel-title">Import Resource</div>
+              <div class="form-row">
+                <input id="import-addr" placeholder="Address (e.g. aws_instance.web)" />
+                <input id="import-id" placeholder="Provider-specific ID" />
+                <button id="btn-import">Import</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="logs">
+          <div class="panel-title">Logs</div>
+          <pre id="logs-pre" class="logs-pre"></pre>
+        </div>
+      </section>
+    </main>
+
+    <script src="renderer.js"></script>
+  </body>
+  </html>
+
+
+
