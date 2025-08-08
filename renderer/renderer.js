@@ -505,15 +505,14 @@ function renderGraph() {
     cy = cytoscape({
       container,
       style: [
-        { selector: 'node', style: { 'background-color': '#1b2534', 'label': 'data(label)', 'font-size': 10, 'text-wrap': 'wrap', 'text-max-width': 220, 'color': '#e5e7eb', 'border-width': 1, 'border-color': '#2a3a53', 'shape': 'round-rectangle', 'text-valign': 'center', 'text-halign': 'center', 'width': 'label', 'height': 'label', 'padding': 6 } },
-        { selector: 'node[type = "module"]', style: { 'background-color': '#29251f', 'border-color': '#4b3d27', 'label': 'data(label)', 'text-valign': 'center', 'text-halign': 'center', 'padding': 12 } },
-        { selector: 'node[type = "variable"]', style: { 'background-color': '#1f2a2e', 'border-color': '#27444b' } },
-        { selector: 'node[planned = "true"]', style: { 'background-color': '#23202a', 'border-color': '#5b3a76' } },
-        { selector: 'edge', style: { 'curve-style': 'bezier', 'target-arrow-shape': 'triangle', 'line-color': '#2f6feb', 'target-arrow-color': '#2f6feb', 'width': 1.5 } },
-        { selector: 'node[change = "create"]', style: { 'background-color': '#064e3b', 'border-color': '#10b981' } },
-        { selector: 'node[change = "delete"]', style: { 'background-color': '#7f1d1d', 'border-color': '#ef4444' } },
-        { selector: 'node[change = "modify"]', style: { 'background-color': '#78350f', 'border-color': '#f59e0b' } },
-        { selector: 'node[type = "resource"][change = ""]', style: { 'background-color': '#1b2534', 'background-opacity': 0.2, 'border-color': '#2a3a53', 'border-width': 1, 'color': '#e5e7eb' } }
+        { selector: 'node', style: { 'background-color': '#111827', 'label': 'data(label)', 'font-family': 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace', 'font-size': 11, 'text-wrap': 'wrap', 'text-max-width': 240, 'color': '#d1d5db', 'border-width': 1, 'border-color': '#374151', 'shape': 'rectangle', 'text-valign': 'center', 'text-halign': 'center', 'width': 'label', 'height': 'label', 'padding': 8 } },
+        { selector: 'node[type = "module"]', style: { 'background-color': '#1f2937', 'border-color': '#374151', 'label': 'data(label)', 'text-valign': 'center', 'text-halign': 'center', 'padding': 12 } },
+        { selector: 'node[type = "variable"]', style: { 'background-color': '#0f172a', 'border-color': '#334155' } },
+        { selector: 'node[planned = "true"]', style: { 'border-style': 'dashed' } },
+        { selector: 'edge', style: { 'curve-style': 'bezier', 'target-arrow-shape': 'triangle', 'line-color': '#6b7280', 'target-arrow-color': '#6b7280', 'width': 1 } },
+        { selector: 'node[change = "create"]', style: { 'color': '#10b981', 'border-color': '#10b981' } },
+        { selector: 'node[change = "delete"]', style: { 'color': '#ef4444', 'border-color': '#ef4444' } },
+        { selector: 'node[change = "modify"]', style: { 'color': '#f59e0b', 'border-color': '#f59e0b' } }
       ]
     });
   }
@@ -521,7 +520,12 @@ function renderGraph() {
   const elements = [];
   const parentSet = new Set();
   for (const n of state.graph.nodes) {
-    const ele = { data: { id: n.id, label: n.id, type: n.type || 'resource', planned: String(Boolean(n.planned)), change: n.change || '' } };
+    const change = n.change || '';
+    let prefix = '';
+    if (change === 'create') prefix = '+ ';
+    else if (change === 'delete') prefix = '- ';
+    else if (change === 'modify') prefix = '~ ';
+    const ele = { data: { id: n.id, label: prefix + n.id, type: n.type || 'resource', planned: String(Boolean(n.planned)), change } };
     if (n.type !== 'module') {
       const parent = getModulePrefixFromAddress(n.id);
       if (parent) {
