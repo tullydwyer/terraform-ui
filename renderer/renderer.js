@@ -519,10 +519,11 @@ function renderGraph() {
       loadResourceDetails(id);
     });
     cy.on('cxttap', 'node', (evt) => {
-      const { renderedPosition } = evt.target;
-      const pos = renderedPosition ? renderedPosition() : evt.position;
+      const pos = evt.renderedPosition || evt.position || evt.target.renderedPosition();
       const rect = cy.container().getBoundingClientRect();
-      showContextMenu(rect.left + pos.x, rect.top + pos.y, evt.target.id());
+      const pageX = rect.left + (pos.x || 0);
+      const pageY = rect.top + (pos.y || 0);
+      showContextMenu(pageX, pageY, evt.target.id());
     });
     cyEventsBound = true;
   }
@@ -627,10 +628,13 @@ function hideContextMenu() {
 
 function wireContextMenu() {
   window.addEventListener('click', hideContextMenu);
-  window.addEventListener('contextmenu', (e) => {
-    // If not on a node, hide
-    if (!(e.target.closest && e.target.closest('.graph-node'))) hideContextMenu();
-  });
+  const cyContainer = document.getElementById('cy');
+  if (cyContainer) {
+    cyContainer.addEventListener('contextmenu', (e) => {
+      // prevent the browser menu on the graph canvas so our custom menu can show
+      e.preventDefault();
+    });
+  }
   ui.contextMenu.addEventListener('click', async (e) => {
     const item = e.target.closest('.menu-item');
     if (!item) return;
@@ -648,6 +652,12 @@ function wireContextMenu() {
       if (!ok) return;
       await withLogs(() => window.api.stateRemove(state.cwd, address));
       await refreshResources();
+    } else if (action === 'show') {
+      const res = await window.api.stateShow(state.cwd, address);
+      const text = (res.stdout || res.stderr || '').trim();
+      if (text) {
+        ui.resourceDetails.textContent = text;
+      }
     }
   });
 }

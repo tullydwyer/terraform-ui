@@ -118,6 +118,7 @@ button.danger { background: #7f1d1d; border-color: #6b1616; }
 .menu-item { padding: 8px 10px; cursor: pointer; }
 .menu-item:hover { background: #1f2937; }
 .menu-item.danger { color: var(--danger); }
+.menu-item.disabled { opacity: 0.5; pointer-events: none; }
 
 
 
