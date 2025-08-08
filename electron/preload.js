@@ -9,6 +9,8 @@ contextBridge.exposeInMainWorld('api', {
   // Terraform operations
   init: (cwd) => ipcRenderer.invoke('terraform:init', cwd),
   plan: (cwd) => ipcRenderer.invoke('terraform:plan', cwd),
+  planJson: (cwd) => ipcRenderer.invoke('terraform:plan:json', cwd),
+  planGraphDot: (cwd) => ipcRenderer.invoke('terraform:graph:plan', cwd),
   apply: (cwd) => ipcRenderer.invoke('terraform:apply', cwd),
   destroy: (cwd) => ipcRenderer.invoke('terraform:destroy', cwd),
   refresh: (cwd) => ipcRenderer.invoke('terraform:refresh', cwd),

@@ -67,10 +67,15 @@
 
         <div id="graph-panel" class="graph-panel hidden">
           <div class="panel" style="height:100%">
-            <div class="panel-title">Dependency Graph</div>
+            <div class="panel-title row">
+              <span>Dependency Graph</span>
+              <div class="graph-controls">
+                <button id="btn-collapse-modules" title="Collapse all modules">Collapse</button>
+                <button id="btn-expand-modules" title="Expand all modules">Expand</button>
+              </div>
+            </div>
             <div id="graph-area" class="graph-area">
-              <svg id="graph-edges" class="graph-edges"></svg>
-              <div id="graph-nodes" class="graph-nodes"></div>
+              <div id="cy"></div>
             </div>
           </div>
         </div>
@@ -87,6 +92,8 @@
       <div class="menu-item danger" data-action="remove">Remove from state</div>
     </div>
 
+    <script src="https://unpkg.com/cytoscape@3.26.0/dist/cytoscape.min.js"></script>
+    <script src="https://unpkg.com/cytoscape-expand-collapse@4.1.0/cytoscape-expand-collapse.js"></script>
     <script src="renderer.js"></script>
   </body>
   </html>

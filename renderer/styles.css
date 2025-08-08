@@ -76,6 +76,8 @@ button.danger { background: #7f1d1d; border-color: #6b1616; }
 .panel { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 10px; }
 .panel + .panel { margin-top: 12px; }
 .panel-title { font-weight: 600; color: var(--muted); margin-bottom: 8px; }
+.panel-title.row { display: flex; align-items: center; justify-content: space-between; }
+.graph-controls { display: flex; gap: 6px; }
 
 .resources-list { list-style: none; padding: 0; margin: 0; }
 .resources-list li { padding: 6px 8px; margin: 2px 0; border-radius: 6px; cursor: pointer; }
@@ -108,11 +110,8 @@ button.danger { background: #7f1d1d; border-color: #6b1616; }
 .graph-panel { height: 60%; padding: 12px; }
 .graph-panel.hidden { display: none; }
 .graph-area { position: relative; width: 100%; height: calc(100% - 28px); background: #0f1117; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
-.graph-edges { position: absolute; inset: 0; width: 100%; height: 100%; }
-.graph-nodes { position: absolute; inset: 0; }
-.graph-node { position: absolute; padding: 6px 8px; border-radius: 6px; background: #1b2534; border: 1px solid #2a3a53; color: var(--text); font-size: 12px; cursor: pointer; user-select: none; }
-.graph-node .type { color: var(--accent); margin-right: 4px; }
-.graph-node.selected { outline: 2px solid var(--primary); }
+#cy { position: absolute; inset: 0; }
+/* The old DOM-based nodes are replaced by Cytoscape */
 
 .context-menu { position: fixed; background: #111827; border: 1px solid var(--border); border-radius: 6px; min-width: 160px; z-index: 1000; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
 .context-menu.hidden { display: none; }

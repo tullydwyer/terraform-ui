@@ -216,5 +216,38 @@ ipcMain.handle('terraform:import', async (_e, cwd, address, id) => {
   return runTerraformStreamed(cwd, ['import', address, id]);
 });
 
+ipcMain.handle('terraform:plan:json', async (_e, cwd) => {
+  const tmpName = `tfplan-ui-${Date.now()}.bin`;
+  const tmpPath = path.join(cwd, tmpName);
+  const planRes = await runTerraformStreamed(cwd, ['plan', '-input=false', '-no-color', `-out=${tmpName}`]);
+  if (planRes.code !== 0) {
+    // best-effort cleanup
+    try { fs.unlinkSync(tmpPath); } catch (_) {}
+    return { ...planRes, json: null };
+  }
+  const showRes = await runTerraformStreamed(cwd, ['show', '-json', tmpName]);
+  let json = null;
+  try {
+    json = JSON.parse(showRes.stdout);
+  } catch (_) {
+    // ignore
+  }
+  try { fs.unlinkSync(tmpPath); } catch (_) {}
+  return { ...showRes, json };
+});
+
+ipcMain.handle('terraform:graph:plan', async (_e, cwd) => {
+  const tmpName = `tfplan-ui-${Date.now()}.bin`;
+  const tmpPath = path.join(cwd, tmpName);
+  const planRes = await runTerraformStreamed(cwd, ['plan', '-input=false', '-no-color', `-out=${tmpName}`]);
+  if (planRes.code !== 0) {
+    try { fs.unlinkSync(tmpPath); } catch (_) {}
+    return { ...planRes, dot: '' };
+  }
+  const graphRes = await runTerraformStreamed(cwd, ['graph', `-plan=${tmpName}`, '-draw-cycles']);
+  try { fs.unlinkSync(tmpPath); } catch (_) {}
+  return { ...graphRes, dot: graphRes.stdout };
+});
+
 
 
