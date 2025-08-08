@@ -178,5 +178,22 @@ button.danger { background: #7f1d1d; border-color: #6b1616; }
 .modal-dialog input { width: 100%; margin: 8px 0 12px; background: #0f1117; color: var(--text); border: 1px solid var(--border); border-radius: 6px; padding: 8px; }
 .modal-actions { display: flex; gap: 8px; justify-content: flex-end; }
 
+/* Toast */
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: 18px;
+  transform: translateX(-50%);
+  background: #0b1220;
+  color: var(--text);
+  border: 1px solid var(--border);
+  padding: 8px 12px;
+  border-radius: 8px;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.6);
+  z-index: 3000;
+  font-size: 12px;
+}
+.toast.hidden { display: none; }
+
 
 

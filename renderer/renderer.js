@@ -892,6 +892,22 @@ function wireEvents() {
   if (relayoutBtn) relayoutBtn.addEventListener('click', () => applyBestLayout());
   wireContextMenu();
 
+  // Toast: show friendly label (not the full command) from main process queue events
+  if (window.api && typeof window.api.onCommand === 'function') {
+    window.api.onCommand((payload) => {
+      const toast = document.getElementById('toast');
+      if (!toast || !payload || !payload.event) return;
+      if (payload.event === 'start') {
+        const label = String(payload.label || 'terraform');
+        toast.textContent = `Running: ${label}`;
+        toast.classList.remove('hidden');
+      } else if (payload.event === 'end') {
+        toast.classList.add('hidden');
+        toast.textContent = '';
+      }
+    });
+  }
+
   // Rename modal actions
   ui.btnRenameCancel.addEventListener('click', hideRenameModal);
   ui.btnRenameOk.addEventListener('click', async () => {

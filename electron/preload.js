@@ -26,6 +26,12 @@ contextBridge.exposeInMainWorld('api', {
     ipcRenderer.on('terraform:log', listener);
     return () => ipcRenderer.removeListener('terraform:log', listener);
   },
+
+  onCommand: (callback) => {
+    const listener = (_event, payload) => callback(payload);
+    ipcRenderer.on('terraform:command', listener);
+    return () => ipcRenderer.removeListener('terraform:command', listener);
+  },
 });
 
 

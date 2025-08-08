@@ -106,6 +106,28 @@ function runTerraformStreamed(workingDirectory, args) {
   });
 }
 
+// Global serialization for Terraform commands (queue/mutex)
+let terraformLock = Promise.resolve();
+
+function withTerraformQueue(label, cwd, fn) {
+  const run = async () => {
+    try {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('terraform:command', { event: 'start', label, cwd });
+      }
+      const res = await fn();
+      return res;
+    } finally {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('terraform:command', { event: 'end', label, cwd });
+      }
+    }
+  };
+  const p = terraformLock.then(run, run);
+  terraformLock = p.catch(() => {});
+  return p;
+}
+
 /**
  * Extract resource addresses from a pulled tfstate JSON object.
  * Supports Terraform state v4 structure where top-level `resources` exist,
@@ -197,127 +219,137 @@ ipcMain.handle('openExternal', async (_event, url) => {
 
 // Terraform commands
 ipcMain.handle('terraform:init', async (_e, cwd) => {
-  return runTerraformStreamed(cwd, ['init', '-input=false', '-no-color']);
+  return withTerraformQueue('init', cwd, () => runTerraformStreamed(cwd, ['init', '-input=false', '-no-color']));
 });
 
 ipcMain.handle('terraform:plan', async (_e, cwd) => {
   // Write a plan file so apply can be smoother if desired later
-  return runTerraformStreamed(cwd, ['plan', '-no-color']);
+  return withTerraformQueue('plan', cwd, () => runTerraformStreamed(cwd, ['plan', '-no-color']));
 });
 
 ipcMain.handle('terraform:apply', async (_e, cwd) => {
-  return runTerraformStreamed(cwd, ['apply', '-auto-approve', '-no-color']);
+  return withTerraformQueue('apply', cwd, () => runTerraformStreamed(cwd, ['apply', '-auto-approve', '-no-color']));
 });
 
 ipcMain.handle('terraform:destroy', async (_e, cwd) => {
-  return runTerraformStreamed(cwd, ['destroy', '-auto-approve', '-no-color']);
+  return withTerraformQueue('destroy', cwd, () => runTerraformStreamed(cwd, ['destroy', '-auto-approve', '-no-color']));
 });
 
 ipcMain.handle('terraform:refresh', async (_e, cwd) => {
-  const supportsRefreshOnly = await detectRefreshOnlySupport(cwd);
-  if (supportsRefreshOnly) {
-    return runTerraformStreamed(cwd, ['apply', '-refresh-only', '-auto-approve', '-no-color']);
-  }
-  return runTerraformStreamed(cwd, ['refresh', '-no-color']);
+  return withTerraformQueue('refresh', cwd, async () => {
+    const supportsRefreshOnly = await detectRefreshOnlySupport(cwd);
+    if (supportsRefreshOnly) {
+      return runTerraformStreamed(cwd, ['apply', '-refresh-only', '-auto-approve', '-no-color']);
+    }
+    return runTerraformStreamed(cwd, ['refresh', '-no-color']);
+  });
 });
 
 ipcMain.handle('terraform:state:list', async (_e, cwd) => {
-  // Prefer pulling state JSON and deriving addresses for remote/local backends uniformly
-  const pullRes = await runTerraformStreamed(cwd, ['state', 'pull']);
-  let resources = [];
-  let snapshotAt = null;
-  try {
-    const obj = JSON.parse(pullRes.stdout || '');
-    resources = extractAddressesFromTfstateJson(obj);
-    snapshotAt = new Date().toISOString();
-  } catch (_) {
-    // Fallback to `state list` if parsing fails
-    const listRes = await runTerraformStreamed(cwd, ['state', 'list']);
-    resources = (listRes.stdout || '')
-      .split(/\r?\n/)
-      .map((s) => s.trim())
-      .filter(Boolean);
-    return { ...listRes, resources, snapshotAt };
-  }
-  return { ...pullRes, resources, snapshotAt };
+  return withTerraformQueue('state pull', cwd, async () => {
+    // Prefer pulling state JSON and deriving addresses for remote/local backends uniformly
+    const pullRes = await runTerraformStreamed(cwd, ['state', 'pull']);
+    let resources = [];
+    let snapshotAt = null;
+    try {
+      const obj = JSON.parse(pullRes.stdout || '');
+      resources = extractAddressesFromTfstateJson(obj);
+      snapshotAt = new Date().toISOString();
+    } catch (_) {
+      // Fallback to `state list` if parsing fails
+      const listRes = await runTerraformStreamed(cwd, ['state', 'list']);
+      resources = (listRes.stdout || '')
+        .split(/\r?\n/)
+        .map((s) => s.trim())
+        .filter(Boolean);
+      return { ...listRes, resources, snapshotAt };
+    }
+    return { ...pullRes, resources, snapshotAt };
+  });
 });
 
 ipcMain.handle('terraform:state:show', async (_e, cwd, address) => {
-  return runTerraformStreamed(cwd, ['state', 'show', '-no-color', address]);
+  return withTerraformQueue('state show', cwd, () => runTerraformStreamed(cwd, ['state', 'show', '-no-color', address]));
 });
 
 ipcMain.handle('terraform:show:json', async (_e, cwd) => {
-  // Pull current state to a temp file, then ask terraform to render JSON from that snapshot
-  const tmpName = `tfstate-ui-${Date.now()}.tfstate`;
-  const tmpPath = path.join(cwd, tmpName);
-  const pullRes = await runTerraformStreamed(cwd, ['state', 'pull']);
-  if (pullRes.code !== 0 || !pullRes.stdout) {
-    // Fallback to direct show -json if pull failed
-    const res = await runTerraformStreamed(cwd, ['show', '-json']);
+  return withTerraformQueue('show:json', cwd, async () => {
+    // Pull current state to a temp file, then ask terraform to render JSON from that snapshot
+    const tmpName = `tfstate-ui-${Date.now()}.tfstate`;
+    const tmpPath = path.join(cwd, tmpName);
+    const pullRes = await runTerraformStreamed(cwd, ['state', 'pull']);
+    if (pullRes.code !== 0 || !pullRes.stdout) {
+      // Fallback to direct show -json if pull failed
+      const res = await runTerraformStreamed(cwd, ['show', '-json']);
+      let json = null;
+      try { json = JSON.parse(res.stdout); } catch (_) {}
+      return { ...res, json, snapshotAt: null };
+    }
+    const snapshotAt = new Date().toISOString();
+    try {
+      fs.writeFileSync(tmpPath, pullRes.stdout, 'utf-8');
+    } catch (_) {
+      // If writing fails, fallback
+      const res = await runTerraformStreamed(cwd, ['show', '-json']);
+      let json = null;
+      try { json = JSON.parse(res.stdout); } catch (_) {}
+      return { ...res, json, snapshotAt: null };
+    }
+    const showRes = await runTerraformStreamed(cwd, ['show', '-json', tmpPath]);
     let json = null;
-    try { json = JSON.parse(res.stdout); } catch (_) {}
-    return { ...res, json, snapshotAt: null };
-  }
-  const snapshotAt = new Date().toISOString();
-  try {
-    fs.writeFileSync(tmpPath, pullRes.stdout, 'utf-8');
-  } catch (_) {
-    // If writing fails, fallback
-    const res = await runTerraformStreamed(cwd, ['show', '-json']);
-    let json = null;
-    try { json = JSON.parse(res.stdout); } catch (_) {}
-    return { ...res, json, snapshotAt: null };
-  }
-  const showRes = await runTerraformStreamed(cwd, ['show', '-json', tmpPath]);
-  let json = null;
-  try { json = JSON.parse(showRes.stdout); } catch (_) {}
-  try { fs.unlinkSync(tmpPath); } catch (_) {}
-  return { ...showRes, json, snapshotAt };
+    try { json = JSON.parse(showRes.stdout); } catch (_) {}
+    try { fs.unlinkSync(tmpPath); } catch (_) {}
+    return { ...showRes, json, snapshotAt };
+  });
 });
 
 ipcMain.handle('terraform:state:mv', async (_e, cwd, sourceAddress, destAddress) => {
-  return runTerraformStreamed(cwd, ['state', 'mv', sourceAddress, destAddress]);
+  return withTerraformQueue('state mv', cwd, () => runTerraformStreamed(cwd, ['state', 'mv', sourceAddress, destAddress]));
 });
 
 ipcMain.handle('terraform:state:rm', async (_e, cwd, address) => {
-  return runTerraformStreamed(cwd, ['state', 'rm', address]);
+  return withTerraformQueue('state rm', cwd, () => runTerraformStreamed(cwd, ['state', 'rm', address]));
 });
 
 ipcMain.handle('terraform:import', async (_e, cwd, address, id) => {
-  return runTerraformStreamed(cwd, ['import', address, id]);
+  return withTerraformQueue('import', cwd, () => runTerraformStreamed(cwd, ['import', address, id]));
 });
 
 ipcMain.handle('terraform:plan:json', async (_e, cwd) => {
-  const tmpName = `tfplan-ui-${Date.now()}.bin`;
-  const tmpPath = path.join(cwd, tmpName);
-  const planRes = await runTerraformStreamed(cwd, ['plan', '-input=false', '-no-color', `-out=${tmpName}`]);
-  if (planRes.code !== 0) {
-    // best-effort cleanup
+  return withTerraformQueue('plan:json', cwd, async () => {
+    const tmpName = `tfplan-ui-${Date.now()}.bin`;
+    const tmpPath = path.join(cwd, tmpName);
+    const planRes = await runTerraformStreamed(cwd, ['plan', '-input=false', '-no-color', `-out=${tmpName}`]);
+    if (planRes.code !== 0) {
+      // best-effort cleanup
+      try { fs.unlinkSync(tmpPath); } catch (_) {}
+      return { ...planRes, json: null };
+    }
+    const showRes = await runTerraformStreamed(cwd, ['show', '-json', tmpName]);
+    let json = null;
+    try {
+      json = JSON.parse(showRes.stdout);
+    } catch (_) {
+      // ignore
+    }
     try { fs.unlinkSync(tmpPath); } catch (_) {}
-    return { ...planRes, json: null };
-  }
-  const showRes = await runTerraformStreamed(cwd, ['show', '-json', tmpName]);
-  let json = null;
-  try {
-    json = JSON.parse(showRes.stdout);
-  } catch (_) {
-    // ignore
-  }
-  try { fs.unlinkSync(tmpPath); } catch (_) {}
-  return { ...showRes, json };
+    return { ...showRes, json };
+  });
 });
 
 ipcMain.handle('terraform:graph:plan', async (_e, cwd) => {
-  const tmpName = `tfplan-ui-${Date.now()}.bin`;
-  const tmpPath = path.join(cwd, tmpName);
-  const planRes = await runTerraformStreamed(cwd, ['plan', '-input=false', '-no-color', `-out=${tmpName}`]);
-  if (planRes.code !== 0) {
+  return withTerraformQueue('graph:plan', cwd, async () => {
+    const tmpName = `tfplan-ui-${Date.now()}.bin`;
+    const tmpPath = path.join(cwd, tmpName);
+    const planRes = await runTerraformStreamed(cwd, ['plan', '-input=false', '-no-color', `-out=${tmpName}`]);
+    if (planRes.code !== 0) {
+      try { fs.unlinkSync(tmpPath); } catch (_) {}
+      return { ...planRes, dot: '' };
+    }
+    const graphRes = await runTerraformStreamed(cwd, ['graph', `-plan=${tmpName}`, '-draw-cycles']);
     try { fs.unlinkSync(tmpPath); } catch (_) {}
-    return { ...planRes, dot: '' };
-  }
-  const graphRes = await runTerraformStreamed(cwd, ['graph', `-plan=${tmpName}`, '-draw-cycles']);
-  try { fs.unlinkSync(tmpPath); } catch (_) {}
-  return { ...graphRes, dot: graphRes.stdout };
+    return { ...graphRes, dot: graphRes.stdout };
+  });
 });
 
 
