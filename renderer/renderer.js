@@ -16,6 +16,11 @@ const ui = {
   graphArea: document.getElementById('graph-area'),
   // Cytoscape graph container is #cy
   contextMenu: document.getElementById('context-menu'),
+  // Rename modal
+  renameModal: document.getElementById('rename-modal'),
+  renameInput: document.getElementById('rename-input'),
+  btnRenameOk: document.getElementById('btn-rename-ok'),
+  btnRenameCancel: document.getElementById('btn-rename-cancel'),
   // Refactor
   mvSrc: document.getElementById('mv-src'),
   mvDst: document.getElementById('mv-dst'),
@@ -745,6 +750,18 @@ function hideContextMenu() {
   ui.contextMenu.dataset.address = '';
 }
 
+function showRenameModal(defaultAddress) {
+  ui.renameModal.dataset.source = defaultAddress || '';
+  ui.renameInput.value = defaultAddress || '';
+  ui.renameModal.classList.remove('hidden');
+  setTimeout(() => ui.renameInput.focus(), 0);
+}
+
+function hideRenameModal() {
+  ui.renameModal.classList.add('hidden');
+  ui.renameModal.dataset.source = '';
+}
+
 function wireContextMenu() {
   window.addEventListener('click', hideContextMenu);
   const cyContainer = document.getElementById('cy');
@@ -762,10 +779,7 @@ function wireContextMenu() {
     hideContextMenu();
     if (!address) return;
     if (action === 'rename') {
-      const dest = prompt('New address for state mv:', address);
-      if (!dest || dest === address) return;
-      await withLogs(() => window.api.stateMove(state.cwd, address, dest));
-      await refreshResources();
+      showRenameModal(address);
     } else if (action === 'remove') {
       const ok = confirm(`Remove ${address} from state?`);
       if (!ok) return;
@@ -808,6 +822,51 @@ function wireEvents() {
   if (expandBtn) expandBtn.addEventListener('click', () => { collapseExpandModules(false); applyBestLayout(); });
   if (relayoutBtn) relayoutBtn.addEventListener('click', () => applyBestLayout());
   wireContextMenu();
+
+  // Rename modal actions
+  ui.btnRenameCancel.addEventListener('click', hideRenameModal);
+  ui.btnRenameOk.addEventListener('click', async () => {
+    const address = ui.renameModal.dataset.source || ui.contextMenu.dataset.address || state.selectedAddress || '';
+    const dest = (ui.renameInput.value || '').trim();
+    hideRenameModal();
+    if (!address || !dest || dest === address) return;
+    const base = baseAddress(address);
+    const isModule = String(address).startsWith('module.');
+    const hasIndex = String(address).includes('[');
+    const matchingInstances = (state.resources || []).filter((r) => baseAddress(r) === base);
+
+    let movePairs = [];
+    if (!isModule && !hasIndex && matchingInstances.length > 1) {
+      movePairs = matchingInstances.map((src) => {
+        const suffix = src.slice(base.length);
+        return [src, dest + suffix];
+      });
+    } else if (!isModule && !hasIndex && matchingInstances.length === 1) {
+      const only = matchingInstances[0];
+      const suffix = only.slice(base.length);
+      movePairs = [[only, dest + suffix]];
+    } else {
+      movePairs = [[address, dest]];
+    }
+
+    await withLogs(async () => {
+      let last = null;
+      for (const [src, dst] of movePairs) {
+        last = await window.api.stateMove(state.cwd, src, dst);
+      }
+      return last;
+    });
+    await refreshResources();
+  });
+
+  // Allow Enter/Escape in input
+  ui.renameInput.addEventListener('keydown', (ev) => {
+    if (ev.key === 'Enter') {
+      ui.btnRenameOk.click();
+    } else if (ev.key === 'Escape') {
+      hideRenameModal();
+    }
+  });
 }
 
 async function boot() {

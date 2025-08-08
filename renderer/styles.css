@@ -148,4 +148,13 @@ button.danger { background: #7f1d1d; border-color: #6b1616; }
 .menu-item.disabled { opacity: 0.5; pointer-events: none; }
 
 
+/* Modal */
+.modal { position: fixed; inset: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 2000; }
+.modal.hidden { display: none; }
+.modal-dialog { background: #111827; border: 1px solid var(--border); border-radius: 8px; padding: 14px; width: 520px; max-width: calc(100% - 24px); box-shadow: 0 10px 30px rgba(0,0,0,0.6); }
+.modal-title { font-weight: 600; color: var(--muted); margin-bottom: 10px; }
+.modal-dialog input { width: 100%; margin: 8px 0 12px; background: #0f1117; color: var(--text); border: 1px solid var(--border); border-radius: 6px; padding: 8px; }
+.modal-actions { display: flex; gap: 8px; justify-content: flex-end; }
+
+
 

@@ -96,6 +96,18 @@
       <div class="menu-item" data-action="expand-module">Expand module</div>
     </div>
 
+    <!-- Rename Modal -->
+    <div id="rename-modal" class="modal hidden">
+      <div class="modal-dialog">
+        <div class="modal-title">Rename resource (terraform state mv)</div>
+        <input id="rename-input" placeholder="Destination address (e.g. aws_instance.web_new)" />
+        <div class="modal-actions">
+          <button id="btn-rename-cancel">Cancel</button>
+          <button id="btn-rename-ok" class="primary">Rename</button>
+        </div>
+      </div>
+    </div>
+
     <script src="https://unpkg.com/cytoscape@3.26.0/dist/cytoscape.min.js"></script>
     <script src="https://unpkg.com/elkjs/lib/elk.bundled.js"></script>
     <script src="https://unpkg.com/cytoscape-elk/cytoscape-elk.js"></script>
