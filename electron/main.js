@@ -225,9 +225,11 @@ ipcMain.handle('terraform:state:list', async (_e, cwd) => {
   // Prefer pulling state JSON and deriving addresses for remote/local backends uniformly
   const pullRes = await runTerraformStreamed(cwd, ['state', 'pull']);
   let resources = [];
+  let snapshotAt = null;
   try {
     const obj = JSON.parse(pullRes.stdout || '');
     resources = extractAddressesFromTfstateJson(obj);
+    snapshotAt = new Date().toISOString();
   } catch (_) {
     // Fallback to `state list` if parsing fails
     const listRes = await runTerraformStreamed(cwd, ['state', 'list']);
@@ -235,9 +237,9 @@ ipcMain.handle('terraform:state:list', async (_e, cwd) => {
       .split(/\r?\n/)
       .map((s) => s.trim())
       .filter(Boolean);
-    return { ...listRes, resources };
+    return { ...listRes, resources, snapshotAt };
   }
-  return { ...pullRes, resources };
+  return { ...pullRes, resources, snapshotAt };
 });
 
 ipcMain.handle('terraform:state:show', async (_e, cwd, address) => {
@@ -254,8 +256,9 @@ ipcMain.handle('terraform:show:json', async (_e, cwd) => {
     const res = await runTerraformStreamed(cwd, ['show', '-json']);
     let json = null;
     try { json = JSON.parse(res.stdout); } catch (_) {}
-    return { ...res, json };
+    return { ...res, json, snapshotAt: null };
   }
+  const snapshotAt = new Date().toISOString();
   try {
     fs.writeFileSync(tmpPath, pullRes.stdout, 'utf-8');
   } catch (_) {
@@ -263,13 +266,13 @@ ipcMain.handle('terraform:show:json', async (_e, cwd) => {
     const res = await runTerraformStreamed(cwd, ['show', '-json']);
     let json = null;
     try { json = JSON.parse(res.stdout); } catch (_) {}
-    return { ...res, json };
+    return { ...res, json, snapshotAt: null };
   }
   const showRes = await runTerraformStreamed(cwd, ['show', '-json', tmpPath]);
   let json = null;
   try { json = JSON.parse(showRes.stdout); } catch (_) {}
   try { fs.unlinkSync(tmpPath); } catch (_) {}
-  return { ...showRes, json };
+  return { ...showRes, json, snapshotAt };
 });
 
 ipcMain.handle('terraform:state:mv', async (_e, cwd, sourceAddress, destAddress) => {

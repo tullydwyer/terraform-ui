@@ -1,6 +1,7 @@
 const ui = {
   btnOpenWorkspace: document.getElementById('btn-open-workspace'),
   workspacePath: document.getElementById('workspace-path'),
+  snapshotIndicator: document.getElementById('snapshot-indicator'),
   btnInit: document.getElementById('btn-init'),
   btnPlan: document.getElementById('btn-plan'),
   btnRefresh: document.getElementById('btn-refresh'),
@@ -39,6 +40,7 @@ let state = {
   selectedAddress: '',
   graph: { nodes: [], edges: [] },
   graphPositions: new Map(), // address -> {x,y}
+  snapshotAt: null, // ISO string when terraform state was last pulled
 };
 
 let cy = null;
@@ -88,6 +90,38 @@ function makeScopedVarId(varRef, modulePrefix) {
 function setWorkspace(cwd) {
   state.cwd = cwd || '';
   ui.workspacePath.textContent = cwd || 'No workspace selected';
+}
+
+function formatRelativeTime(iso) {
+  if (!iso) return '—';
+  const then = new Date(iso).getTime();
+  if (Number.isNaN(then)) return '—';
+  const now = Date.now();
+  const diffSec = Math.max(0, Math.floor((now - then) / 1000));
+  if (diffSec < 5) return 'just now';
+  if (diffSec < 60) return `${diffSec}s ago`;
+  const diffMin = Math.floor(diffSec / 60);
+  if (diffMin < 60) return `${diffMin}m ago`;
+  const diffHr = Math.floor(diffMin / 60);
+  if (diffHr < 24) return `${diffHr}h ago`;
+  const diffDay = Math.floor(diffHr / 24);
+  return `${diffDay}d ago`;
+}
+
+function renderSnapshotIndicator() {
+  if (!ui.snapshotIndicator) return;
+  const rel = formatRelativeTime(state.snapshotAt);
+  ui.snapshotIndicator.textContent = `Snapshot: ${rel}`;
+  if (state.snapshotAt) {
+    try {
+      const d = new Date(state.snapshotAt);
+      ui.snapshotIndicator.title = `Last state pull: ${d.toLocaleString()}`;
+    } catch (_) {
+      ui.snapshotIndicator.title = 'Last state pull time unavailable';
+    }
+  } else {
+    ui.snapshotIndicator.title = 'Last state pull time unavailable';
+  }
 }
 
 async function ensureWorkspaceSelected() {
@@ -206,6 +240,8 @@ async function refreshResources() {
   if (!state.cwd) return;
   const res = await window.api.stateList(state.cwd);
   state.resources = res.resources || [];
+  if (res && res.snapshotAt) state.snapshotAt = res.snapshotAt;
+  renderSnapshotIndicator();
   await buildGraph();
   renderResources();
 }
@@ -316,6 +352,13 @@ async function buildGraph() {
     window.api.planJson(state.cwd),
     window.api.planGraphDot(state.cwd),
   ]);
+  if (sj && sj.snapshotAt) {
+    // Prefer the most recent snapshot timestamp we see
+    if (!state.snapshotAt || new Date(sj.snapshotAt).getTime() > new Date(state.snapshotAt).getTime()) {
+      state.snapshotAt = sj.snapshotAt;
+      renderSnapshotIndicator();
+    }
+  }
   const showJson = sj.json || null;
   const planJson = pj.json || null;
   const planDot = (pg && (pg.dot || pg.stdout)) || '';

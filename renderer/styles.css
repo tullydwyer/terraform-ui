@@ -32,6 +32,14 @@ body {
 .workspace-path {
   color: var(--muted); font-size: 12px; max-width: 700px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
+.snapshot-indicator {
+  color: var(--muted);
+  font-size: 12px;
+  padding: 2px 6px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: #12121a;
+}
 .actions { display: flex; gap: 8px; }
 
 button {
