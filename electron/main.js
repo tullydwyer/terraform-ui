@@ -106,6 +106,47 @@ function runTerraformStreamed(workingDirectory, args) {
   });
 }
 
+/**
+ * Extract resource addresses from a pulled tfstate JSON object.
+ * Supports Terraform state v4 structure where top-level `resources` exist,
+ * and each resource may have a `module`, `mode`, `type`, `name`, and `instances`.
+ */
+function extractAddressesFromTfstateJson(stateObj) {
+  try {
+    if (!stateObj || !Array.isArray(stateObj.resources)) return [];
+    const addresses = [];
+    for (const res of stateObj.resources) {
+      if (!res || !res.type || !res.name) continue;
+      const modulePrefix = res.module ? res.module + '.' : '';
+      const base = (res.mode === 'data')
+        ? `data.${res.type}.${res.name}`
+        : `${res.type}.${res.name}`;
+      const instances = Array.isArray(res.instances) ? res.instances : [];
+      if (instances.length === 0) {
+        addresses.push(modulePrefix + base);
+        continue;
+      }
+      for (const inst of instances) {
+        const key = inst && Object.prototype.hasOwnProperty.call(inst, 'index_key')
+          ? inst.index_key
+          : undefined;
+        if (key === undefined || key === null) {
+          addresses.push(modulePrefix + base);
+        } else {
+          const idx = Array.isArray(key)
+            ? `[${key.map((k) => JSON.stringify(k)).join(',')}]`
+            : `[${JSON.stringify(key)}]`;
+          addresses.push(modulePrefix + base + idx);
+        }
+      }
+    }
+    // Ensure uniqueness and stable order
+    return Array.from(new Set(addresses)).sort();
+  } catch (_) {
+    return [];
+  }
+}
+
 async function detectRefreshOnlySupport(workingDirectory) {
   // Conservative default: prefer refresh-only if available
   try {
@@ -181,12 +222,22 @@ ipcMain.handle('terraform:refresh', async (_e, cwd) => {
 });
 
 ipcMain.handle('terraform:state:list', async (_e, cwd) => {
-  const res = await runTerraformStreamed(cwd, ['state', 'list']);
-  const resources = res.stdout
-    .split(/\r?\n/)
-    .map((s) => s.trim())
-    .filter(Boolean);
-  return { ...res, resources };
+  // Prefer pulling state JSON and deriving addresses for remote/local backends uniformly
+  const pullRes = await runTerraformStreamed(cwd, ['state', 'pull']);
+  let resources = [];
+  try {
+    const obj = JSON.parse(pullRes.stdout || '');
+    resources = extractAddressesFromTfstateJson(obj);
+  } catch (_) {
+    // Fallback to `state list` if parsing fails
+    const listRes = await runTerraformStreamed(cwd, ['state', 'list']);
+    resources = (listRes.stdout || '')
+      .split(/\r?\n/)
+      .map((s) => s.trim())
+      .filter(Boolean);
+    return { ...listRes, resources };
+  }
+  return { ...pullRes, resources };
 });
 
 ipcMain.handle('terraform:state:show', async (_e, cwd, address) => {
@@ -194,14 +245,31 @@ ipcMain.handle('terraform:state:show', async (_e, cwd, address) => {
 });
 
 ipcMain.handle('terraform:show:json', async (_e, cwd) => {
-  const res = await runTerraformStreamed(cwd, ['show', '-json']);
-  let json = null;
-  try {
-    json = JSON.parse(res.stdout);
-  } catch (e) {
-    // ignore parse error, return raw text for inspection
+  // Pull current state to a temp file, then ask terraform to render JSON from that snapshot
+  const tmpName = `tfstate-ui-${Date.now()}.tfstate`;
+  const tmpPath = path.join(cwd, tmpName);
+  const pullRes = await runTerraformStreamed(cwd, ['state', 'pull']);
+  if (pullRes.code !== 0 || !pullRes.stdout) {
+    // Fallback to direct show -json if pull failed
+    const res = await runTerraformStreamed(cwd, ['show', '-json']);
+    let json = null;
+    try { json = JSON.parse(res.stdout); } catch (_) {}
+    return { ...res, json };
   }
-  return { ...res, json };
+  try {
+    fs.writeFileSync(tmpPath, pullRes.stdout, 'utf-8');
+  } catch (_) {
+    // If writing fails, fallback
+    const res = await runTerraformStreamed(cwd, ['show', '-json']);
+    let json = null;
+    try { json = JSON.parse(res.stdout); } catch (_) {}
+    return { ...res, json };
+  }
+  const showRes = await runTerraformStreamed(cwd, ['show', '-json', tmpPath]);
+  let json = null;
+  try { json = JSON.parse(showRes.stdout); } catch (_) {}
+  try { fs.unlinkSync(tmpPath); } catch (_) {}
+  return { ...showRes, json };
 });
 
 ipcMain.handle('terraform:state:mv', async (_e, cwd, sourceAddress, destAddress) => {
