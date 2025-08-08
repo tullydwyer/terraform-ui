@@ -282,14 +282,32 @@ async function buildGraph() {
     }
   }
 
+  // Derive change types from plan
+  const changeBy = new Map();
+  if (planJson && Array.isArray(planJson.resource_changes)) {
+    for (const rc of planJson.resource_changes) {
+      const addr = baseAddress(rc.address || (rc.type && rc.name ? `${rc.type}.${rc.name}` : ''));
+      if (!addr) continue;
+      const actions = (rc.change && rc.change.actions) || [];
+      let change = '';
+      const hasCreate = actions.includes('create');
+      const hasDelete = actions.includes('delete');
+      const hasUpdate = actions.includes('update');
+      if ((hasCreate && hasDelete) || hasUpdate) change = 'modify';
+      else if (hasCreate) change = 'create';
+      else if (hasDelete) change = 'delete';
+      if (change) changeBy.set(addr, change);
+    }
+  }
+
   // Build nodes: union of existing and planned creates
   const nodeIds = new Set([...existing, ...plannedCreates]);
-  const nodeMap = new Map(Array.from(nodeIds).map((addr) => [addr, { id: addr, type: 'resource', planned: plannedCreates.has(addr) && !existing.has(addr), inputs: new Set() }]));
+  const nodeMap = new Map(Array.from(nodeIds).map((addr) => [addr, { id: addr, type: 'resource', planned: plannedCreates.has(addr) && !existing.has(addr), change: changeBy.get(addr) || '', inputs: new Set() }]));
   const ensureNodeLocal = (addr) => {
     const key = baseAddress(addr);
     let n = nodeMap.get(key);
     if (!n) {
-      n = { id: key, type: 'resource', planned: plannedCreates.has(key) && !existing.has(key), inputs: new Set() };
+      n = { id: key, type: 'resource', planned: plannedCreates.has(key) && !existing.has(key), change: changeBy.get(key) || '', inputs: new Set() };
       nodeMap.set(key, n);
     }
     return n;
@@ -491,7 +509,11 @@ function renderGraph() {
         { selector: 'node[type = "module"]', style: { 'background-color': '#29251f', 'border-color': '#4b3d27', 'label': 'data(label)', 'text-valign': 'top', 'text-halign': 'center' } },
         { selector: 'node[type = "variable"]', style: { 'background-color': '#1f2a2e', 'border-color': '#27444b' } },
         { selector: 'node[planned = "true"]', style: { 'background-color': '#23202a', 'border-color': '#5b3a76' } },
-        { selector: 'edge', style: { 'curve-style': 'bezier', 'target-arrow-shape': 'triangle', 'line-color': '#2f6feb', 'target-arrow-color': '#2f6feb', 'width': 1.5 } }
+        { selector: 'edge', style: { 'curve-style': 'bezier', 'target-arrow-shape': 'triangle', 'line-color': '#2f6feb', 'target-arrow-color': '#2f6feb', 'width': 1.5 } },
+        { selector: 'node[change = "create"]', style: { 'background-color': '#064e3b', 'border-color': '#10b981' } },
+        { selector: 'node[change = "delete"]', style: { 'background-color': '#7f1d1d', 'border-color': '#ef4444' } },
+        { selector: 'node[change = "modify"]', style: { 'background-color': '#78350f', 'border-color': '#f59e0b' } },
+        { selector: 'node[type = "resource"][change = ""]', style: { 'background-color': '#1b2534', 'background-opacity': 0.2, 'border-color': '#2a3a53', 'border-width': 1, 'color': '#e5e7eb' } }
       ]
     });
   }
@@ -499,7 +521,7 @@ function renderGraph() {
   const elements = [];
   const parentSet = new Set();
   for (const n of state.graph.nodes) {
-    const ele = { data: { id: n.id, label: n.id, type: n.type || 'resource', planned: String(Boolean(n.planned)) } };
+    const ele = { data: { id: n.id, label: n.id, type: n.type || 'resource', planned: String(Boolean(n.planned)), change: n.change || '' } };
     if (n.type !== 'module') {
       const parent = getModulePrefixFromAddress(n.id);
       if (parent) {
