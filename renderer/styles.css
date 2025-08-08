@@ -80,10 +80,30 @@ button.danger { background: #7f1d1d; border-color: #6b1616; }
 .graph-controls { display: flex; gap: 6px; }
 
 .resources-list { list-style: none; padding: 0; margin: 0; }
-.resources-list li { padding: 6px 8px; margin: 2px 0; border-radius: 6px; cursor: pointer; }
-.resources-list li:hover { background: #1b1b22; }
-.resources-list li.active { background: #242432; border: 1px solid #2d2d3b; }
-.resource-type { color: var(--accent); font-size: 12px; margin-right: 6px; }
+.resources-list li {
+  display: grid;
+  grid-template-columns: 16px 1fr;
+  align-items: center;
+  column-gap: 8px;
+  padding: 8px 10px;
+  margin: 4px 0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-size: 12px;
+  background: #111827;
+  border: 1px solid #374151;
+  border-left-width: 3px;
+  border-left-color: transparent;
+  border-radius: 4px;
+  cursor: pointer;
+}
+.resources-list li:hover { background: #1f2937; }
+.resources-list li.active { border-color: #284062; box-shadow: 0 0 0 1px #284062 inset; }
+.resources-list li .marker { width: 16px; text-align: center; }
+.resources-list li.change-create { border-left-color: #10b981; }
+.resources-list li.change-delete { border-left-color: #ef4444; }
+.resources-list li.change-modify { border-left-color: #f59e0b; }
+.resource-id { color: var(--text); }
+.resource-type { color: var(--muted); }
 .resource-name { color: var(--text); }
 
 .details-pre, .logs-pre {

@@ -126,12 +126,59 @@ async function withLogs(task) {
 
 function renderResources() {
   ui.resourcesList.innerHTML = '';
+  const addedBases = new Set();
+  // First: existing resources from state
   state.resources.forEach((addr) => {
     const li = document.createElement('li');
     li.dataset.address = addr;
     const [type, ...rest] = addr.split('.');
     const name = rest.join('.');
-    li.innerHTML = `<span class="resource-type">${type}</span><span class="resource-name">${name}</span>`;
+    const base = baseAddress(addr);
+    addedBases.add(base);
+    const node = state.graph.nodes.find((n) => n.id === base && (n.type || 'resource') === 'resource');
+    const change = (node && node.change) || '';
+    let marker = '';
+    if (change === 'create') marker = '+';
+    else if (change === 'delete') marker = '-';
+    else if (change === 'modify') marker = '~';
+    li.classList.add(`change-${change || 'none'}`);
+    li.innerHTML = `
+      <span class="marker">${marker || ''}</span>
+      <span class="resource-id"><span class="resource-type">${type}</span>.<span class="resource-name">${name}</span></span>
+    `;
+    li.addEventListener('click', async () => {
+      document.querySelectorAll('.resources-list li').forEach((el) => el.classList.remove('active'));
+      li.classList.add('active');
+      state.selectedAddress = addr;
+      await loadResourceDetails(addr);
+    });
+    li.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+      const x = e.pageX || (e.clientX + window.scrollX);
+      const y = e.pageY || (e.clientY + window.scrollY);
+      showContextMenu(x, y, addr);
+    });
+    ui.resourcesList.appendChild(li);
+  });
+
+  // Then: planned-only resources that are not yet in state
+  const plannedOnly = state.graph.nodes.filter((n) => (n.type || 'resource') === 'resource' && (n.planned || (n.change && n.change !== '')) && !addedBases.has(n.id));
+  plannedOnly.forEach((n) => {
+    const li = document.createElement('li');
+    const addr = n.id;
+    li.dataset.address = addr;
+    const [type, ...rest] = addr.split('.');
+    const name = rest.join('.');
+    const change = n.change || (n.planned ? 'create' : '');
+    let marker = '';
+    if (change === 'create') marker = '+';
+    else if (change === 'delete') marker = '-';
+    else if (change === 'modify') marker = '~';
+    li.classList.add(`change-${change || 'none'}`);
+    li.innerHTML = `
+      <span class="marker">${marker || ''}</span>
+      <span class="resource-id"><span class="resource-type">${type}</span>.<span class="resource-name">${name}</span></span>
+    `;
     li.addEventListener('click', async () => {
       document.querySelectorAll('.resources-list li').forEach((el) => el.classList.remove('active'));
       li.classList.add('active');
@@ -152,11 +199,8 @@ async function refreshResources() {
   if (!state.cwd) return;
   const res = await window.api.stateList(state.cwd);
   state.resources = res.resources || [];
-  renderResources();
   await buildGraph();
-  if (isGraphActive()) {
-    renderGraph();
-  }
+  renderResources();
 }
 
 async function loadResourceDetails(address) {
