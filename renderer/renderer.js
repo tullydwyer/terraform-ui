@@ -419,10 +419,18 @@ function renderResources() {
     else if (change === 'delete') marker = '-';
     else if (change === 'modify') marker = '~';
     else if (change === 'replace') marker = '-/+';
+    let changeLabel = '';
+    if (change === 'create') changeLabel = 'will be created';
+    else if (change === 'delete') changeLabel = 'will be deleted';
+    else if (change === 'modify') changeLabel = 'will be modified';
+    else if (change === 'replace') changeLabel = 'will be recreated';
     li.classList.add(`change-${change || 'none'}`);
     li.innerHTML = `
       <span class="marker">${marker || ''}</span>
-      <span class="resource-id"><span class="resource-type">${type}</span>.<span class="resource-name">${name}</span></span>
+      <div>
+        <span class="resource-id"><span class="resource-type">${type}</span>.<span class="resource-name">${name}</span></span>
+        ${changeLabel ? `<div class="resource-change">${changeLabel}</div>` : ''}
+      </div>
     `;
     li.addEventListener('click', async () => {
       document.querySelectorAll('.resources-list li').forEach((el) => el.classList.remove('active'));
@@ -453,10 +461,18 @@ function renderResources() {
     else if (change === 'delete') marker = '-';
     else if (change === 'modify') marker = '~';
     else if (change === 'replace') marker = '-/+';
+    let changeLabel = '';
+    if (change === 'create') changeLabel = 'will be created';
+    else if (change === 'delete') changeLabel = 'will be deleted';
+    else if (change === 'modify') changeLabel = 'will be modified';
+    else if (change === 'replace') changeLabel = 'will be recreated';
     li.classList.add(`change-${change || 'none'}`);
     li.innerHTML = `
       <span class="marker">${marker || ''}</span>
-      <span class="resource-id"><span class="resource-type">${type}</span>.<span class="resource-name">${name}</span></span>
+      <div>
+        <span class="resource-id"><span class="resource-type">${type}</span>.<span class="resource-name">${name}</span></span>
+        ${changeLabel ? `<div class="resource-change">${changeLabel}</div>` : ''}
+      </div>
     `;
     li.addEventListener('click', async () => {
       document.querySelectorAll('.resources-list li').forEach((el) => el.classList.remove('active'));

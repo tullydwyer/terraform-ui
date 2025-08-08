@@ -159,6 +159,8 @@ button.danger { background: #7f1d1d; border-color: #6b1616; }
 .resource-id { color: var(--text); }
 .resource-type { color: var(--muted); }
 .resource-name { color: var(--text); }
+/* Subtext for planned action under resource id */
+.resource-change { color: var(--muted); font-size: 11px; margin-top: 2px; }
 
 .details-pre, .logs-pre {
   margin: 0;
