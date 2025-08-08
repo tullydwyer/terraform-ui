@@ -3,6 +3,7 @@ An advanced user UI for Terraform.
 
 ## Features
 - **Resources explorer**: Browse all resources in the current workspace and inspect details.
+- **Dependency graph**: Visual graph of resources and their references (from Terraform JSON). Right-click nodes to rename (state mv) or remove from state.
 - **One-click actions**: Buttons for `init`, `plan`, `refresh`, `apply`, `destroy` with live logs.
 - **State refactor tools**: Run `terraform state mv` and `terraform state rm` safely.
 - **Import helper**: Import existing infrastructure with `terraform import`.
