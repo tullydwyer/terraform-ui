@@ -40,6 +40,20 @@ body {
   border-radius: 999px;
   background: #12121a;
 }
+
+.spinner {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border: 2px solid #3b3b46;
+  border-top-color: var(--primary);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+.spinner.hidden { display: none; }
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
 .actions { display: flex; gap: 8px; }
 
 button {

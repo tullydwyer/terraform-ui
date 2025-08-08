@@ -2,6 +2,7 @@ const ui = {
   btnOpenWorkspace: document.getElementById('btn-open-workspace'),
   workspacePath: document.getElementById('workspace-path'),
   snapshotIndicator: document.getElementById('snapshot-indicator'),
+  spinner: document.getElementById('global-spinner'),
   btnInit: document.getElementById('btn-init'),
   btnPlan: document.getElementById('btn-plan'),
   btnRefresh: document.getElementById('btn-refresh'),
@@ -45,6 +46,29 @@ let state = {
 
 let cy = null;
 let cyEventsBound = false;
+let inflightCount = 0;
+
+function setSpinnerVisible(visible) {
+  if (!ui.spinner) return;
+  if (visible) ui.spinner.classList.remove('hidden');
+  else ui.spinner.classList.add('hidden');
+}
+
+function beginBusy() {
+  inflightCount = Math.max(0, inflightCount) + 1;
+  setSpinnerVisible(true);
+}
+
+function endBusy() {
+  inflightCount = Math.max(0, inflightCount - 1);
+  if (inflightCount === 0) setSpinnerVisible(false);
+}
+
+async function callWithSpinner(fn) {
+  beginBusy();
+  try { return await fn(); }
+  finally { endBusy(); }
+}
 
 // -------- Helpers for graph addressing --------
 function baseAddress(address) {
@@ -152,6 +176,7 @@ function clearLogs() {
 async function withLogs(task) {
   clearLogs();
   const unsubscribe = window.api.onLog(appendLog);
+  beginBusy();
   try {
     const result = await task();
     if (result && typeof result.code !== 'undefined') {
@@ -160,6 +185,7 @@ async function withLogs(task) {
     return result;
   } finally {
     if (typeof unsubscribe === 'function') unsubscribe();
+    endBusy();
   }
 }
 
@@ -238,7 +264,7 @@ function renderResources() {
 
 async function refreshResources() {
   if (!state.cwd) return;
-  const res = await window.api.stateList(state.cwd);
+  const res = await callWithSpinner(() => window.api.stateList(state.cwd));
   state.resources = res.resources || [];
   if (res && res.snapshotAt) state.snapshotAt = res.snapshotAt;
   renderSnapshotIndicator();
@@ -249,7 +275,7 @@ async function refreshResources() {
 async function loadResourceDetails(address) {
   if (!state.cwd) return;
   ui.resourceDetails.textContent = 'Loading...';
-  const detail = await window.api.stateShow(state.cwd, address);
+  const detail = await callWithSpinner(() => window.api.stateShow(state.cwd, address));
   const text = detail.stdout || detail.stderr || '';
   ui.resourceDetails.textContent = text.trim() || '(no details)';
 }
@@ -347,11 +373,11 @@ function activateTab(which) {
 
 async function buildGraph() {
   // Use terraform show -json and plan -json to build a combined graph
-  const [sj, pj, pg] = await Promise.all([
+  const [sj, pj, pg] = await callWithSpinner(() => Promise.all([
     window.api.showJson(state.cwd),
     window.api.planJson(state.cwd),
     window.api.planGraphDot(state.cwd),
-  ]);
+  ]));
   if (sj && sj.snapshotAt) {
     // Prefer the most recent snapshot timestamp we see
     if (!state.snapshotAt || new Date(sj.snapshotAt).getTime() > new Date(state.snapshotAt).getTime()) {
@@ -829,7 +855,7 @@ function wireContextMenu() {
       await withLogs(() => window.api.stateRemove(state.cwd, address));
       await refreshResources();
     } else if (action === 'show') {
-      const res = await window.api.stateShow(state.cwd, address);
+      const res = await callWithSpinner(() => window.api.stateShow(state.cwd, address));
       const text = (res.stdout || res.stderr || '').trim();
       if (text) {
         ui.resourceDetails.textContent = text;
