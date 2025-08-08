@@ -1,6 +1,7 @@
 const { app, BrowserWindow, ipcMain, dialog, shell } = require('electron');
 const path = require('path');
 const fs = require('fs');
+const os = require('os');
 const { spawn } = require('child_process');
 
 /**
@@ -81,17 +82,26 @@ function runTerraformStreamed(workingDirectory, args) {
   return new Promise((resolve) => {
     const child = spawn('terraform', args, {
       cwd: workingDirectory,
-      shell: true,
+      shell: false,
+      windowsHide: true,
       env: { ...process.env, TF_IN_AUTOMATION: '1' },
     });
 
     let stdout = '';
     let stderr = '';
+    const MAX_BUFFER = 10 * 1024 * 1024; // 10MB per stream (tail kept)
+    let resolved = false;
 
     const sendLog = (data, stream) => {
       const message = data.toString();
-      if (stream === 'stdout') stdout += message;
-      if (stream === 'stderr') stderr += message;
+      if (stream === 'stdout') {
+        stdout += message;
+        if (stdout.length > MAX_BUFFER) stdout = stdout.slice(stdout.length - MAX_BUFFER);
+      }
+      if (stream === 'stderr') {
+        stderr += message;
+        if (stderr.length > MAX_BUFFER) stderr = stderr.slice(stderr.length - MAX_BUFFER);
+      }
       if (mainWindow && !mainWindow.isDestroyed()) {
         mainWindow.webContents.send('terraform:log', { stream, message });
       }
@@ -101,11 +111,21 @@ function runTerraformStreamed(workingDirectory, args) {
     child.stderr.on('data', (d) => sendLog(d, 'stderr'));
 
     child.on('error', (err) => {
-      sendLog(`Error spawning terraform: ${err.message}\n`, 'stderr');
+      const hint = err && err.code === 'ENOENT'
+        ? 'Terraform CLI not found on PATH. Please install Terraform and ensure it is accessible from the system PATH.\n'
+        : '';
+      sendLog(`Error spawning terraform: ${err.message}\n${hint}`, 'stderr');
+      if (!resolved) {
+        resolved = true;
+        resolve({ code: 127, stdout, stderr, args });
+      }
     });
 
     child.on('close', (code) => {
-      resolve({ code, stdout, stderr, args });
+      if (!resolved) {
+        resolved = true;
+        resolve({ code, stdout, stderr, args });
+      }
     });
   });
 }
@@ -130,6 +150,27 @@ function withTerraformQueue(label, cwd, fn) {
   const p = terraformLock.then(run, run);
   terraformLock = p.catch(() => {});
   return p;
+}
+
+function isValidDirectory(dirPath) {
+  try {
+    if (typeof dirPath !== 'string' || dirPath.trim().length === 0) return false;
+    const st = fs.statSync(dirPath);
+    return st.isDirectory();
+  } catch (_) {
+    return false;
+  }
+}
+
+function withValidCwd(label, cwd, fn) {
+  if (!isValidDirectory(cwd)) {
+    const msg = `Invalid workspace directory: ${String(cwd || '')}`;
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('terraform:log', { stream: 'stderr', message: msg + '\n' });
+    }
+    return Promise.resolve({ code: 1, stdout: '', stderr: msg });
+  }
+  return withTerraformQueue(label, cwd, fn);
 }
 
 /**
@@ -251,9 +292,12 @@ ipcMain.handle('workspace:get', async () => {
 
 ipcMain.handle('workspace:set', async (_event, workspacePath) => {
   const cfg = readConfig();
-  cfg.workspacePath = workspacePath;
-  writeConfig(cfg);
-  return cfg.workspacePath;
+  if (isValidDirectory(workspacePath)) {
+    cfg.workspacePath = workspacePath;
+    writeConfig(cfg);
+    return cfg.workspacePath;
+  }
+  return cfg.workspacePath || '';
 });
 
 ipcMain.handle('workspace:select', async () => {
@@ -262,10 +306,13 @@ ipcMain.handle('workspace:select', async () => {
   });
   if (result.canceled || result.filePaths.length === 0) return '';
   const selected = result.filePaths[0];
-  const cfg = readConfig();
-  cfg.workspacePath = selected;
-  writeConfig(cfg);
-  return selected;
+  if (isValidDirectory(selected)) {
+    const cfg = readConfig();
+    cfg.workspacePath = selected;
+    writeConfig(cfg);
+    return selected;
+  }
+  return '';
 });
 
 // Open external URLs (if any are added later)
@@ -275,37 +322,37 @@ ipcMain.handle('openExternal', async (_event, url) => {
 
 // Terraform commands
 ipcMain.handle('terraform:init', async (_e, cwd) => {
-  return withTerraformQueue('init', cwd, () => runTerraformStreamed(cwd, ['init', '-input=false']));
+  return withValidCwd('init', cwd, () => runTerraformStreamed(cwd, ['init', '-input=false']));
 });
 
 ipcMain.handle('terraform:plan', async (_e, cwd, options) => {
   const varArgs = buildVarFileArgs(options && options.varFiles);
-  return withTerraformQueue('plan', cwd, () => runTerraformStreamed(cwd, ['plan', ...varArgs]));
+  return withValidCwd('plan', cwd, () => runTerraformStreamed(cwd, ['plan', '-input=false', ...varArgs]));
 });
 
 ipcMain.handle('terraform:apply', async (_e, cwd, options) => {
   const varArgs = buildVarFileArgs(options && options.varFiles);
-  return withTerraformQueue('apply', cwd, () => runTerraformStreamed(cwd, ['apply', '-auto-approve', ...varArgs]));
+  return withValidCwd('apply', cwd, () => runTerraformStreamed(cwd, ['apply', '-input=false', '-auto-approve', ...varArgs]));
 });
 
 ipcMain.handle('terraform:destroy', async (_e, cwd, options) => {
   const varArgs = buildVarFileArgs(options && options.varFiles);
-  return withTerraformQueue('destroy', cwd, () => runTerraformStreamed(cwd, ['destroy', '-auto-approve', ...varArgs]));
+  return withValidCwd('destroy', cwd, () => runTerraformStreamed(cwd, ['destroy', '-input=false', '-auto-approve', ...varArgs]));
 });
 
 ipcMain.handle('terraform:refresh', async (_e, cwd, options) => {
   const varArgs = buildVarFileArgs(options && options.varFiles);
-  return withTerraformQueue('refresh', cwd, async () => {
+  return withValidCwd('refresh', cwd, async () => {
     const supportsRefreshOnly = await detectRefreshOnlySupport(cwd);
     if (supportsRefreshOnly) {
-      return runTerraformStreamed(cwd, ['apply', '-refresh-only', '-auto-approve', ...varArgs]);
+      return runTerraformStreamed(cwd, ['apply', '-refresh-only', '-input=false', '-auto-approve', ...varArgs]);
     }
-    return runTerraformStreamed(cwd, ['refresh', ...varArgs]);
+    return runTerraformStreamed(cwd, ['refresh', '-input=false', ...varArgs]);
   });
 });
 
 ipcMain.handle('terraform:state:list', async (_e, cwd) => {
-  return withTerraformQueue('state pull', cwd, async () => {
+  return withValidCwd('state pull', cwd, async () => {
     // Prefer pulling state JSON and deriving addresses for remote/local backends uniformly
     const pullRes = await runTerraformStreamed(cwd, ['state', 'pull']);
     let resources = [];
@@ -328,14 +375,14 @@ ipcMain.handle('terraform:state:list', async (_e, cwd) => {
 });
 
 ipcMain.handle('terraform:state:show', async (_e, cwd, address) => {
-  return withTerraformQueue('state show', cwd, () => runTerraformStreamed(cwd, ['state', 'show', address]));
+  return withValidCwd('state show', cwd, () => runTerraformStreamed(cwd, ['state', 'show', address]));
 });
 
 ipcMain.handle('terraform:show:json', async (_e, cwd) => {
-  return withTerraformQueue('show:json', cwd, async () => {
-    // Pull current state to a temp file, then ask terraform to render JSON from that snapshot
-    const tmpName = `tfstate-ui-${Date.now()}.tfstate`;
-    const tmpPath = path.join(cwd, tmpName);
+  return withValidCwd('show:json', cwd, async () => {
+    // Pull current state to a temp file in OS temp dir, then render JSON
+    const tmpName = `tfstate-ui-${Date.now()}-${Math.random().toString(36).slice(2)}.tfstate`;
+    const tmpPath = path.join(os.tmpdir(), tmpName);
     const pullRes = await runTerraformStreamed(cwd, ['state', 'pull']);
     if (pullRes.code !== 0 || !pullRes.stdout) {
       // Fallback to direct show -json if pull failed
@@ -363,29 +410,29 @@ ipcMain.handle('terraform:show:json', async (_e, cwd) => {
 });
 
 ipcMain.handle('terraform:state:mv', async (_e, cwd, sourceAddress, destAddress) => {
-  return withTerraformQueue('state mv', cwd, () => runTerraformStreamed(cwd, ['state', 'mv', sourceAddress, destAddress]));
+  return withValidCwd('state mv', cwd, () => runTerraformStreamed(cwd, ['state', 'mv', sourceAddress, destAddress]));
 });
 
 ipcMain.handle('terraform:state:rm', async (_e, cwd, address) => {
-  return withTerraformQueue('state rm', cwd, () => runTerraformStreamed(cwd, ['state', 'rm', address]));
+  return withValidCwd('state rm', cwd, () => runTerraformStreamed(cwd, ['state', 'rm', address]));
 });
 
 ipcMain.handle('terraform:import', async (_e, cwd, address, id) => {
-  return withTerraformQueue('import', cwd, () => runTerraformStreamed(cwd, ['import', address, id]));
+  return withValidCwd('import', cwd, () => runTerraformStreamed(cwd, ['import', address, id]));
 });
 
 ipcMain.handle('terraform:plan:json', async (_e, cwd, options) => {
-  return withTerraformQueue('plan:json', cwd, async () => {
-    const tmpName = `tfplan-ui-${Date.now()}.bin`;
-    const tmpPath = path.join(cwd, tmpName);
+  return withValidCwd('plan:json', cwd, async () => {
+    const tmpName = `tfplan-ui-${Date.now()}-${Math.random().toString(36).slice(2)}.bin`;
+    const tmpPath = path.join(os.tmpdir(), tmpName);
     const varArgs = buildVarFileArgs(options && options.varFiles);
-    const planRes = await runTerraformStreamed(cwd, ['plan', '-input=false', `-out=${tmpName}`, ...varArgs]);
+    const planRes = await runTerraformStreamed(cwd, ['plan', '-input=false', `-out=${tmpPath}`, ...varArgs]);
     if (planRes.code !== 0) {
       // best-effort cleanup
       try { fs.unlinkSync(tmpPath); } catch (_) { /* ignore unlink failure */ }
       return { ...planRes, json: null };
     }
-    const showRes = await runTerraformStreamed(cwd, ['show', '-json', tmpName]);
+    const showRes = await runTerraformStreamed(cwd, ['show', '-json', tmpPath]);
     let json = null;
     try {
       json = JSON.parse(showRes.stdout);
@@ -398,16 +445,16 @@ ipcMain.handle('terraform:plan:json', async (_e, cwd, options) => {
 });
 
 ipcMain.handle('terraform:graph:plan', async (_e, cwd, options) => {
-  return withTerraformQueue('graph:plan', cwd, async () => {
-    const tmpName = `tfplan-ui-${Date.now()}.bin`;
-    const tmpPath = path.join(cwd, tmpName);
+  return withValidCwd('graph:plan', cwd, async () => {
+    const tmpName = `tfplan-ui-${Date.now()}-${Math.random().toString(36).slice(2)}.bin`;
+    const tmpPath = path.join(os.tmpdir(), tmpName);
     const varArgs = buildVarFileArgs(options && options.varFiles);
-    const planRes = await runTerraformStreamed(cwd, ['plan', '-input=false', `-out=${tmpName}`, ...varArgs]);
+    const planRes = await runTerraformStreamed(cwd, ['plan', '-input=false', `-out=${tmpPath}`, ...varArgs]);
     if (planRes.code !== 0) {
       try { fs.unlinkSync(tmpPath); } catch (_) { /* ignore unlink failure */ }
       return { ...planRes, dot: '' };
     }
-    const graphRes = await runTerraformStreamed(cwd, ['graph', `-plan=${tmpName}`, '-draw-cycles']);
+    const graphRes = await runTerraformStreamed(cwd, ['graph', `-plan=${tmpPath}`, '-draw-cycles']);
     try { fs.unlinkSync(tmpPath); } catch (_) { /* ignore unlink failure */ }
     return { ...graphRes, dot: graphRes.stdout };
   });
@@ -415,7 +462,7 @@ ipcMain.handle('terraform:graph:plan', async (_e, cwd, options) => {
 
 // Terraform workspaces
 ipcMain.handle('terraform:workspaces:list', async (_e, cwd) => {
-  return withTerraformQueue('workspace list', cwd, async () => {
+  return withValidCwd('workspace list', cwd, async () => {
     const res = await runTerraformStreamed(cwd, ['workspace', 'list']);
     const parsed = parseWorkspaceList(res.stdout || res.stderr || '');
     return { ...res, ...parsed };
@@ -423,12 +470,13 @@ ipcMain.handle('terraform:workspaces:list', async (_e, cwd) => {
 });
 
 ipcMain.handle('terraform:workspace:select', async (_e, cwd, name) => {
-  return withTerraformQueue('workspace select', cwd, () => runTerraformStreamed(cwd, ['workspace', 'select', name]));
+  return withValidCwd('workspace select', cwd, () => runTerraformStreamed(cwd, ['workspace', 'select', name]));
 });
 
 // List tfvars files
 ipcMain.handle('terraform:tfvars:list', async (_e, cwd) => {
   try {
+    if (!isValidDirectory(cwd)) return { code: 1, files: [], error: 'Invalid workspace directory' };
     const files = findTfvarsFiles(cwd);
     return { code: 0, files };
   } catch (err) {

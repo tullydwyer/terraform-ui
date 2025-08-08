@@ -1,19 +1,21 @@
 {
   "root": true,
-  "env": {
-    "es2022": true
-  },
-  "extends": [
-    "eslint:recommended"
+  "env": { "es2022": true },
+  "extends": ["eslint:recommended"],
+  "parserOptions": { "ecmaVersion": 2022, "sourceType": "script" },
+  "ignorePatterns": [
+    "example_terraform/**",
+    "dist/**",
+    "node_modules/**"
   ],
-  "parserOptions": {
-    "ecmaVersion": 2022,
-    "sourceType": "script"
-  },
   "rules": {
     "no-unused-vars": ["warn", { "args": "after-used", "ignoreRestSiblings": true }],
     "no-undef": "error",
     "no-console": "off",
+    "eqeqeq": ["warn", "always"],
+    "curly": ["warn", "all"],
+    "no-implied-eval": "error",
+    "no-new-func": "error",
     "no-empty": ["error", { "allowEmptyCatch": true }]
   },
   "overrides": [

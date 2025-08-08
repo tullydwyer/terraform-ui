@@ -176,6 +176,19 @@ function appendLog({ stream, message }) {
   const prefix = stream === 'stderr' ? '[err] ' : '';
   const html = ansiToHtml(prefix + String(message || ''));
   ui.logsPre.insertAdjacentHTML('beforeend', html);
+  // Trim logs to prevent unbounded DOM growth
+  try {
+    const MAX_CHARS = 2_000_000; // ~2MB of text
+    if (ui.logsPre.textContent.length > MAX_CHARS) {
+      const excess = ui.logsPre.textContent.length - MAX_CHARS;
+      // Remove oldest nodes until below threshold
+      let removed = 0;
+      while (removed < excess && ui.logsPre.firstChild) {
+        removed += (ui.logsPre.firstChild.textContent || '').length;
+        ui.logsPre.removeChild(ui.logsPre.firstChild);
+      }
+    }
+  } catch (_) {}
   ui.logsPre.scrollTop = ui.logsPre.scrollHeight;
 }
 function renderWorkspaceDropdown() {
