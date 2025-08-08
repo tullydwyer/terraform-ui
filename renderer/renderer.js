@@ -804,29 +804,7 @@ async function buildGraph() {
   if (isGraphActive()) renderGraph();
 }
 
-// (legacy helper removed)
-
-function parseDotEdges(dot, nodeIds) {
-  if (!dot) return [];
-  const out = [];
-  const lines = dot.split(/\r?\n/);
-  const edgeRe = /"([^"]+)"\s*->\s*"([^"]+)"/;
-  const addrRe = /([a-zA-Z0-9_]+\.[a-zA-Z0-9_]+(?:\[[^\]]+\])?)/g;
-  for (const line of lines) {
-    const m = line.match(edgeRe);
-    if (!m) continue;
-    const left = m[1];
-    const right = m[2];
-    const leftMatches = Array.from(left.matchAll(addrRe)).map((x) => baseAddress(x[1]));
-    const rightMatches = Array.from(right.matchAll(addrRe)).map((x) => baseAddress(x[1]));
-    const from = leftMatches.length ? leftMatches[leftMatches.length - 1] : null;
-    const to = rightMatches.length ? rightMatches[rightMatches.length - 1] : null;
-    if (from && to && from !== to && (nodeIds.has(from) || nodeIds.has(to))) {
-      out.push({ from, to });
-    }
-  }
-  return out;
-}
+// (DOT parse helper removed)
 
 function renderGraph() {
   const container = document.getElementById('cy');

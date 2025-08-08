@@ -10,7 +10,7 @@ resource "local_file" "file_1" {
 }
 
 resource "local_file" "file_2" {
-  content  = "${local.environment}_name_2s"
+  content  = "${local.environment}_name_2"
   filename = "out/${local.environment}_root_file_2.bar"
 }
 

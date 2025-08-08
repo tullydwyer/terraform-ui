@@ -444,21 +444,7 @@ ipcMain.handle('terraform:plan:json', async (_e, cwd, options) => {
   });
 });
 
-ipcMain.handle('terraform:graph:plan', async (_e, cwd, options) => {
-  return withValidCwd('graph:plan', cwd, async () => {
-    const tmpName = `tfplan-ui-${Date.now()}-${Math.random().toString(36).slice(2)}.bin`;
-    const tmpPath = path.join(os.tmpdir(), tmpName);
-    const varArgs = buildVarFileArgs(options && options.varFiles);
-    const planRes = await runTerraformStreamed(cwd, ['plan', '-input=false', `-out=${tmpPath}`, ...varArgs]);
-    if (planRes.code !== 0) {
-      try { fs.unlinkSync(tmpPath); } catch (_) { /* ignore unlink failure */ }
-      return { ...planRes, dot: '' };
-    }
-    const graphRes = await runTerraformStreamed(cwd, ['graph', `-plan=${tmpPath}`, '-draw-cycles']);
-    try { fs.unlinkSync(tmpPath); } catch (_) { /* ignore unlink failure */ }
-    return { ...graphRes, dot: graphRes.stdout };
-  });
-});
+// (Removed graph:plan handler; DOT graph no longer used)
 
 // Terraform workspaces
 ipcMain.handle('terraform:workspaces:list', async (_e, cwd) => {

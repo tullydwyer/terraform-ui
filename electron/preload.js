@@ -10,7 +10,6 @@ contextBridge.exposeInMainWorld('api', {
   init: (cwd) => ipcRenderer.invoke('terraform:init', cwd),
   plan: (cwd, options) => ipcRenderer.invoke('terraform:plan', cwd, options),
   planJson: (cwd, options) => ipcRenderer.invoke('terraform:plan:json', cwd, options),
-  planGraphDot: (cwd, options) => ipcRenderer.invoke('terraform:graph:plan', cwd, options),
   apply: (cwd, options) => ipcRenderer.invoke('terraform:apply', cwd, options),
   destroy: (cwd, options) => ipcRenderer.invoke('terraform:destroy', cwd, options),
   refresh: (cwd, options) => ipcRenderer.invoke('terraform:refresh', cwd, options),
