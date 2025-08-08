@@ -505,8 +505,8 @@ function renderGraph() {
     cy = cytoscape({
       container,
       style: [
-        { selector: 'node', style: { 'background-color': '#1b2534', 'label': 'data(label)', 'font-size': 10, 'text-wrap': 'wrap', 'text-max-width': 200, 'color': '#e5e7eb', 'border-width': 1, 'border-color': '#2a3a53', 'shape': 'round-rectangle' } },
-        { selector: 'node[type = "module"]', style: { 'background-color': '#29251f', 'border-color': '#4b3d27', 'label': 'data(label)', 'text-valign': 'top', 'text-halign': 'center' } },
+        { selector: 'node', style: { 'background-color': '#1b2534', 'label': 'data(label)', 'font-size': 10, 'text-wrap': 'wrap', 'text-max-width': 220, 'color': '#e5e7eb', 'border-width': 1, 'border-color': '#2a3a53', 'shape': 'round-rectangle', 'text-valign': 'center', 'text-halign': 'center', 'width': 'label', 'height': 'label', 'padding': 6 } },
+        { selector: 'node[type = "module"]', style: { 'background-color': '#29251f', 'border-color': '#4b3d27', 'label': 'data(label)', 'text-valign': 'center', 'text-halign': 'center', 'padding': 12 } },
         { selector: 'node[type = "variable"]', style: { 'background-color': '#1f2a2e', 'border-color': '#27444b' } },
         { selector: 'node[planned = "true"]', style: { 'background-color': '#23202a', 'border-color': '#5b3a76' } },
         { selector: 'edge', style: { 'curve-style': 'bezier', 'target-arrow-shape': 'triangle', 'line-color': '#2f6feb', 'target-arrow-color': '#2f6feb', 'width': 1.5 } },
