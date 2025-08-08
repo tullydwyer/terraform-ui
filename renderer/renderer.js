@@ -555,6 +555,8 @@ function renderGraph() {
     });
     cyEventsBound = true;
   }
+
+  // no overlay buttons; use right-click menu options
 }
 
 function applyBestLayout() {
@@ -595,6 +597,30 @@ function applyBestLayout() {
   }
 }
 
+function toggleModuleCollapse(node) {
+  if (!cy || !cy.expandCollapse) return;
+  const api = cy.expandCollapse('get') || cy.expandCollapse({ layoutBy: { name: 'cose', animate: false } });
+  let pending = 0;
+  const done = () => {
+    pending--;
+    if (pending <= 0) {
+      cy.off('expandcollapse.collapsedone', done);
+      cy.off('expandcollapse.expanddone', done);
+      applyBestLayout();
+    }
+  };
+  cy.on('expandcollapse.collapsedone', done);
+  cy.on('expandcollapse.expanddone', done);
+  pending = 1;
+  if (node.isExpandable && node.isExpandable()) api.expand(node);
+  else if (node.isCollapsible && node.isCollapsible()) api.collapse(node);
+  else {
+    // try toggle
+    if (node.data('expanded') === false) api.expand(node);
+    else api.collapse(node);
+  }
+}
+
 function isOverlapping() {
   const positions = new Map();
   const nodes = cy.nodes();
@@ -613,11 +639,23 @@ function isOverlapping() {
 function collapseExpandModules(collapse) {
   if (!cy || !cy.expandCollapse) return;
   const api = cy.expandCollapse('get') || cy.expandCollapse({ layoutBy: { name: 'cose', animate: false } });
-  if (collapse) {
-    cy.nodes('[type = "module"]').forEach((n) => api.collapse(n));
-  } else {
-    cy.nodes('[type = "module"]').forEach((n) => api.expand(n));
-  }
+  const modules = cy.nodes('[type = "module"]');
+  let pending = 0;
+  const done = () => {
+    pending--;
+    if (pending <= 0) {
+      cy.off('expandcollapse.collapsedone', done);
+      cy.off('expandcollapse.expanddone', done);
+      applyBestLayout();
+    }
+  };
+  cy.on('expandcollapse.collapsedone', done);
+  cy.on('expandcollapse.expanddone', done);
+  modules.forEach((n) => {
+    pending++;
+    if (collapse) api.collapse(n); else api.expand(n);
+  });
+  if (pending === 0) applyBestLayout();
 }
 
 function enableDrag(el, address) {
@@ -686,6 +724,14 @@ function wireContextMenu() {
       if (text) {
         ui.resourceDetails.textContent = text;
       }
+    } else if (action === 'collapse-module') {
+      if (!cy) return;
+      const n = cy.getElementById(address);
+      if (n && n.data('type') === 'module') toggleModuleCollapse(n);
+    } else if (action === 'expand-module') {
+      if (!cy) return;
+      const n = cy.getElementById(address);
+      if (n && n.data('type') === 'module') toggleModuleCollapse(n);
     }
   });
 }
@@ -702,6 +748,12 @@ function wireEvents() {
   ui.btnImport.addEventListener('click', doImport);
   ui.tabInspect.addEventListener('click', () => activateTab('inspect'));
   ui.tabGraph.addEventListener('click', () => activateTab('graph'));
+  const collapseBtn = document.getElementById('btn-collapse-modules');
+  const expandBtn = document.getElementById('btn-expand-modules');
+  const relayoutBtn = document.getElementById('btn-relayout');
+  if (collapseBtn) collapseBtn.addEventListener('click', () => { collapseExpandModules(true); applyBestLayout(); });
+  if (expandBtn) expandBtn.addEventListener('click', () => { collapseExpandModules(false); applyBestLayout(); });
+  if (relayoutBtn) relayoutBtn.addEventListener('click', () => applyBestLayout());
   wireContextMenu();
 }
 

@@ -70,8 +70,9 @@
             <div class="panel-title row">
               <span>Dependency Graph</span>
               <div class="graph-controls">
-                <button id="btn-collapse-modules" title="Collapse all modules">Collapse</button>
-                <button id="btn-expand-modules" title="Expand all modules">Expand</button>
+                <button id="btn-collapse-modules" title="Collapse all modules">Collapse all</button>
+                <button id="btn-expand-modules" title="Expand all modules">Expand all</button>
+                <button id="btn-relayout" title="Re-run layout">Re-layout</button>
               </div>
             </div>
             <div id="graph-area" class="graph-area">
@@ -91,6 +92,8 @@
       <div class="menu-item" data-action="rename">Rename (state mv)</div>
       <div class="menu-item danger" data-action="remove">Remove from state</div>
       <div class="menu-item" data-action="show">Show state (terraform state show)</div>
+      <div class="menu-item" data-action="collapse-module">Collapse module</div>
+      <div class="menu-item" data-action="expand-module">Expand module</div>
     </div>
 
     <script src="https://unpkg.com/cytoscape@3.26.0/dist/cytoscape.min.js"></script>

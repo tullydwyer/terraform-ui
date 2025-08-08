@@ -111,6 +111,7 @@ button.danger { background: #7f1d1d; border-color: #6b1616; }
 .graph-panel.hidden { display: none; }
 .graph-area { position: relative; width: 100%; height: calc(100% - 28px); background: #0f1117; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
 #cy { position: absolute; inset: 0; }
+/* Removed overlay per new right-click collapse */
 /* The old DOM-based nodes are replaced by Cytoscape */
 
 .context-menu { position: fixed; background: #111827; border: 1px solid var(--border); border-radius: 6px; min-width: 160px; z-index: 1000; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
