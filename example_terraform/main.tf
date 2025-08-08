@@ -15,6 +15,8 @@ resource "local_file" "file_2" {
 }
 
 resource "local_file" "file_3" {
-  content  = "${local.environment}_name_3"
-  filename = "out/${local.environment}_root_file_3.bar"
+  for_each = toset(["a", "b", "c"])
+
+  content  = "${local.environment}_name_${each.value}"
+  filename = "out/${local.environment}_root_file_${each.value}.bar"
 }

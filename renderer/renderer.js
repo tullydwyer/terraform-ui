@@ -592,10 +592,9 @@ function activateTab(which) {
 async function buildGraph() {
   // Use terraform show -json and plan -json to build a combined graph
   const varFiles = getSelectedVarFilesArray();
-  const [sj, pj, pg] = await callWithSpinner(() => Promise.all([
+  const [sj, pj] = await callWithSpinner(() => Promise.all([
     window.api.showJson(state.cwd),
     window.api.planJson(state.cwd, { varFiles }),
-    window.api.planGraphDot(state.cwd, { varFiles }),
   ]));
   if (sj && sj.snapshotAt) {
     // Prefer the most recent snapshot timestamp we see
@@ -606,7 +605,7 @@ async function buildGraph() {
   }
   const showJson = sj.json || null;
   const planJson = pj.json || null;
-  const planDot = (pg && (pg.dot || pg.stdout)) || '';
+  const planDot = '';
 
   // Track using base addresses to align instances from plan and state
   const existing = new Set(state.resources.map(baseAddress));
@@ -664,7 +663,7 @@ async function buildGraph() {
     const collect = (module) => {
       if (!module) return;
       const resArr = (module.resources || []).concat(module.child_modules?.flatMap((m) => m.resources || []) || []);
-      for (const r of resArr) {
+        for (const r of resArr) {
         const addr = r.address || (r.type && r.name ? `${r.type}.${r.name}` : null);
         if (!addr) continue;
         const deps = new Set((r.depends_on || []).map((d) => baseAddress(normalizeRefToAddress(d) || d)));
@@ -673,10 +672,18 @@ async function buildGraph() {
         for (const key of Object.keys(expressions)) {
           const expr = expressions[key];
           const refs = (expr.references || []).filter(Boolean);
-          refs.forEach((ref) => {
-            const a = normalizeRefToAddress(ref);
-            if (a) deps.add(baseAddress(a));
-          });
+            const resModulePrefix = getModulePrefixFromAddress(addr);
+            refs.forEach((ref) => {
+              const a = normalizeRefToAddress(ref);
+              if (!a) return;
+              if (a.startsWith('var.')) {
+                // Scope variable refs to the module of the resource being evaluated
+                const scopedVar = makeScopedVarId(a, resModulePrefix);
+                if (scopedVar) deps.add(baseAddress(scopedVar));
+              } else {
+                deps.add(baseAddress(a));
+              }
+            });
         }
         for (const d of deps) edges.push({ from: baseAddress(d), to: baseAddress(addr) });
 
@@ -764,13 +771,7 @@ async function buildGraph() {
     if (cfgRoot) collectCfg(cfgRoot, '');
   } catch (_) {}
 
-  // Also parse edges from terraform graph -plan DOT output as a fallback
-  try {
-    const dotEdges = parseDotEdges(planDot, nodeIds);
-    for (const de of dotEdges) edges.push({ from: baseAddress(de.from), to: baseAddress(de.to) });
-  } catch (_) {
-    // ignore parsing fallback
-  }
+  // (DOT graph fallback disabled; plan/state JSON provide sufficient data for edges)
 
   // Ensure we have nodes for all module/variable endpoints referenced by edges (including module.<path>.var.<name>)
   for (const { from, to } of edges) {
