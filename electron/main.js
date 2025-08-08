@@ -46,6 +46,10 @@ function createWindow() {
   });
 
   mainWindow.once('ready-to-show', () => {
+    try {
+      // Maximize on first show so the app opens fully expanded
+      mainWindow.maximize();
+    } catch (_) { /* ignore */ }
     mainWindow.show();
   });
 
