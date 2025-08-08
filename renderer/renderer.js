@@ -472,6 +472,8 @@ async function doPlan() {
   await withLogs(() => window.api.plan(state.cwd, { varFiles }));
   // Rebuild from plan-json to immediately reflect planned graph
   await buildGraph();
+  // Update the resources panel to reflect planned changes/markers and planned-only resources
+  renderResources();
   if (isGraphActive()) renderGraph();
 }
 
@@ -607,12 +609,12 @@ async function buildGraph() {
 
   // Build nodes: union of existing and planned creates
   const nodeIds = new Set([...existing, ...plannedCreates]);
-  const nodeMap = new Map(Array.from(nodeIds).map((addr) => [addr, { id: addr, type: 'resource', planned: plannedCreates.has(addr) && !existing.has(addr), change: changeBy.get(addr) || '', inputs: new Set() }]));
+  const nodeMap = new Map(Array.from(nodeIds).map((addr) => [addr, { id: addr, type: 'resource', planned: plannedCreates.has(addr) && !existing.has(addr), change: changeBy.get(addr) || '', inputs: new Set(), outputs: new Set() }]));
   const ensureNodeLocal = (addr) => {
     const key = baseAddress(addr);
     let n = nodeMap.get(key);
     if (!n) {
-      n = { id: key, type: 'resource', planned: plannedCreates.has(key) && !existing.has(key), change: changeBy.get(key) || '', inputs: new Set() };
+      n = { id: key, type: 'resource', planned: plannedCreates.has(key) && !existing.has(key), change: changeBy.get(key) || '', inputs: new Set(), outputs: new Set() };
       nodeMap.set(key, n);
     }
     return n;
