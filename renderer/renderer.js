@@ -10,7 +10,6 @@ const ui = {
   btnPlan: document.getElementById('btn-plan'),
   btnRefresh: document.getElementById('btn-refresh'),
   btnApply: document.getElementById('btn-apply'),
-  btnDestroy: document.getElementById('btn-destroy'),
   resourcesList: document.getElementById('resources-list'),
   resourceDetails: document.getElementById('resource-details'),
   logsPre: document.getElementById('logs-pre'),
@@ -784,15 +783,7 @@ async function doRefresh() {
   if (isGraphActive()) renderGraph();
 }
 
-async function doDestroy() {
-  if (!(await ensureWorkspaceSelected())) return;
-  const ok = confirm('Are you sure you want to destroy all managed infrastructure?');
-  if (!ok) return;
-  const varFiles = getSelectedVarFilesArray();
-  await withLogs(() => window.api.destroy(state.cwd, { varFiles }));
-  await refreshResources();
-  if (isGraphActive()) renderGraph();
-}
+// destroy feature removed
 
 async function doStateMove() {
   if (!(await ensureWorkspaceSelected())) return;
@@ -1397,7 +1388,7 @@ function wireEvents() {
   ui.btnPlan.addEventListener('click', doPlan);
   ui.btnApply.addEventListener('click', doApply);
   ui.btnRefresh.addEventListener('click', doRefresh);
-  ui.btnDestroy.addEventListener('click', doDestroy);
+  // destroy feature removed
   if (ui.btnStateMv) ui.btnStateMv.addEventListener('click', doStateMove);
   if (ui.btnStateRm) ui.btnStateRm.addEventListener('click', doStateRemove);
   if (ui.btnImport) ui.btnImport.addEventListener('click', doImport);

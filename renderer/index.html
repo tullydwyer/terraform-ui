@@ -33,8 +33,7 @@
         <button id="btn-init">Init</button>
         <button id="btn-plan">Plan</button>
         <button id="btn-refresh">Refresh</button>
-        <button id="btn-apply" class="primary">Apply</button>
-        <button id="btn-destroy" class="danger">Destroy</button>
+        <button id="btn-apply">Apply</button>
       </div>
     </header>
 
@@ -44,9 +43,11 @@
           <span>Resources</span>
           <div class="resources-controls">
             <input id="resources-search" class="resources-search" placeholder="Filter…" title="Filter modules and resources" />
-            <button id="btn-res-collapse-all" title="Collapse all modules">Collapse all</button>
-            <button id="btn-res-expand-all" title="Expand all modules">Expand all</button>
           </div>
+        </div>
+        <div class="resources-controls">
+          <button id="btn-res-collapse-all" title="Collapse all modules">Collapse all</button>
+          <button id="btn-res-expand-all" title="Expand all modules">Expand all</button>
         </div>
         <ul id="resources-list" class="resources-list"></ul>
       </aside>
