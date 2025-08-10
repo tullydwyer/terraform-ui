@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog, shell } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, shell, Menu } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
@@ -158,7 +158,11 @@ function createWindow() {
       sandbox: true,
     },
     show: false,
+    autoHideMenuBar: true,
   });
+
+  // Hide native menu bar (Windows/Linux)
+  try { mainWindow.setMenuBarVisibility(false); } catch (_) {}
 
   mainWindow.once('ready-to-show', () => {
     try {
@@ -176,6 +180,8 @@ function createWindow() {
 }
 
 app.whenReady().then(() => {
+  // Remove application menu entirely
+  try { Menu.setApplicationMenu(null); } catch (_) {}
   createWindow();
   // Load command history index and ensure storage exists
   loadHistoryIndex();
