@@ -127,6 +127,44 @@ function highlightText(text) {
   }
 }
 
+// -------- Fallback Terraform/HCL highlighter (minimal) --------
+function escapeHtml(text) {
+  return String(text || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
+function highlightTerraformFallback(raw) {
+  const input = String(raw || '');
+  const placeholders = [];
+  let s = input;
+  // Extract strings to placeholders
+  s = s.replace(/"([^"\\]|\\.)*"/g, (m) => {
+    const idx = placeholders.push({ type: 'string', value: m }) - 1;
+    return `__STR_${idx}__`;
+  });
+  // Extract comments (# ... end)
+  s = s.replace(/(^|\s)#.*$/gm, (m) => {
+    const idx = placeholders.push({ type: 'comment', value: m }) - 1;
+    return `__CMT_${idx}__`;
+  });
+  // Escape remaining html
+  s = escapeHtml(s);
+  // Keywords
+  s = s.replace(/\b(resource|data|variable|provider|module|locals|output)\b/g, '<span class="hljs-keyword">$1</span>');
+  // Attribute keys before '=' at line start/indent
+  s = s.replace(/(^|\n)(\s*)([a-zA-Z_][\w\-]*)\s*(=)/g, (m, p1, indent, key, eq) => {
+    return `${p1}${indent}<span class="hljs-attr">${key}</span> ${eq}`;
+  });
+  // Numbers
+  s = s.replace(/\b\d+(?:\.\d+)?\b/g, '<span class="hljs-number">$&</span>');
+  // Restore comments and strings with spans
+  s = s.replace(/__CMT_(\d+)__/g, (_, i) => `<span class="hljs-comment">${escapeHtml(placeholders[Number(i)].value)}</span>`);
+  s = s.replace(/__STR_(\d+)__/g, (_, i) => `<span class="hljs-string">${escapeHtml(placeholders[Number(i)].value)}</span>`);
+  return s;
+}
+
 function isGraphActive() {
   return !ui.graphPanel.classList.contains('hidden');
 }
@@ -672,10 +710,44 @@ async function refreshResources() {
 
 async function loadResourceDetails(address) {
   if (!state.cwd) return;
-  ui.resourceDetails.textContent = 'Loading...';
+  const pre = ui.resourceDetails;
+  pre.innerHTML = '<code class="language-terraform">Loading...</code>';
   const detail = await callWithSpinner(() => window.api.stateShow(state.cwd, address));
-  const text = detail.stdout || detail.stderr || '';
-  ui.resourceDetails.textContent = text.trim() || '(no details)';
+  // Prefer stdout; state show sometimes emits ansi, remove it for cleaner highlighting
+  let text = (detail.stdout || detail.stderr || '').trim() || '(no details)';
+  try {
+    // Strip ANSI escape sequences
+    text = text.replace(/\u001b\[[0-9;]*m/g, '');
+  } catch (_) {}
+  pre.innerHTML = `<code class="language-terraform"></code>`;
+  const codeEl = pre.querySelector('code');
+  codeEl.textContent = text;
+  // Ensure base class for theme
+  codeEl.classList.add('hljs');
+  try {
+    if (window.hljs) {
+      codeEl.classList.add('language-terraform');
+      if (typeof window.hljs.highlightElement === 'function') {
+        window.hljs.highlightElement(codeEl);
+      } else if (typeof window.hljs.highlightBlock === 'function') {
+        window.hljs.highlightBlock(codeEl);
+      }
+      // Fallback: auto-detect and force set
+      const hasToken = /hljs-/.test(codeEl.innerHTML);
+      if (!hasToken) {
+        const res = window.hljs.highlightAuto(text, ['terraform','hcl']);
+        if (res && res.value) {
+          codeEl.innerHTML = res.value;
+          codeEl.classList.add('hljs');
+          codeEl.classList.add(res.language ? `language-${res.language}` : 'language-terraform');
+        }
+      }
+    }
+  } catch (_) {}
+  // Final fallback: minimal custom highlighter
+  if (!/hljs-/.test(codeEl.innerHTML)) {
+    codeEl.innerHTML = highlightTerraformFallback(text);
+  }
 }
 
 async function doInit() {
@@ -1027,15 +1099,15 @@ function renderGraph() {
     cy = cytoscape({
       container,
       style: [
-        { selector: 'node', style: { 'background-color': '#111827', 'label': 'data(label)', 'font-family': 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace', 'font-size': 11, 'text-wrap': 'wrap', 'text-max-width': 240, 'color': '#d1d5db', 'border-width': 1, 'border-color': '#374151', 'shape': 'rectangle', 'text-valign': 'center', 'text-halign': 'center', 'width': 'label', 'height': 'label', 'padding': 8 } },
-        { selector: 'node[type = "module"]', style: { 'background-color': '#1f2937', 'border-color': '#374151', 'label': 'data(label)', 'text-valign': 'center', 'text-halign': 'center', 'padding': 12 } },
+        { selector: 'node', style: { 'background-color': '#ffffff', 'label': 'data(label)', 'font-family': 'Roboto Mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace', 'font-size': 11, 'text-wrap': 'wrap', 'text-max-width': 260, 'color': '#111827', 'border-width': 1, 'border-color': '#e5e7eb', 'shape': 'rectangle', 'text-valign': 'center', 'text-halign': 'center', 'width': 'label', 'height': 'label', 'padding': 10 } },
+        { selector: 'node[type = "module"]', style: { 'background-color': '#f8fafc', 'border-color': '#e5e7eb', 'label': 'data(label)', 'text-valign': 'center', 'text-halign': 'center', 'padding': 14 } },
         // variable nodes no longer rendered
         { selector: 'node[planned = "true"]', style: { 'border-style': 'dashed' } },
-        { selector: 'edge', style: { 'curve-style': 'bezier', 'target-arrow-shape': 'triangle', 'line-color': '#6b7280', 'target-arrow-color': '#6b7280', 'width': 1 } },
-        { selector: 'node[change = "create"]', style: { 'color': '#10b981', 'border-color': '#10b981' } },
-        { selector: 'node[change = "delete"]', style: { 'color': '#ef4444', 'border-color': '#ef4444' } },
-        { selector: 'node[change = "modify"]', style: { 'color': '#f59e0b', 'border-color': '#f59e0b' } },
-        { selector: 'node[change = "replace"]', style: { 'color': '#f59e0b', 'border-color': '#ef4444' } }
+        { selector: 'edge', style: { 'curve-style': 'bezier', 'target-arrow-shape': 'triangle', 'line-color': '#9ca3af', 'target-arrow-color': '#9ca3af', 'width': 1 } },
+        { selector: 'node[change = "create"]', style: { 'color': '#047857', 'border-color': '#10b981' } },
+        { selector: 'node[change = "delete"]', style: { 'color': '#b91c1c', 'border-color': '#dc2626' } },
+        { selector: 'node[change = "modify"]', style: { 'color': '#b45309', 'border-color': '#f59e0b' } },
+        { selector: 'node[change = "replace"]', style: { 'color': '#b45309', 'border-color': '#dc2626' } }
       ]
     });
   }

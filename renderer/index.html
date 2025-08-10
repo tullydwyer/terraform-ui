@@ -4,7 +4,14 @@
     <meta charset="UTF-8" />
     <meta http-equiv="X-UA-Compatible" content="IE=edge" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#ffffff" />
     <title>Terraform UI</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Roboto+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+    <!-- Load HLJS theme first so our stylesheet can override token colors -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css" />
+    <!-- Our app styles last (override HLJS colors) -->
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
@@ -52,7 +59,7 @@
         <div class="split single">
           <div class="details">
             <div class="panel-title">Details</div>
-            <pre id="resource-details" class="details-pre">Select a resource to view details</pre>
+            <pre id="resource-details" class="details-pre"><code class="language-terraform">Select a resource to view details</code></pre>
           </div>
         </div>
 
@@ -127,6 +134,18 @@
     <script src="https://unpkg.com/elkjs/lib/elk.bundled.js"></script>
     <script src="https://unpkg.com/cytoscape-elk/cytoscape-elk.js"></script>
     <script src="https://unpkg.com/cytoscape-expand-collapse@4.1.0/cytoscape-expand-collapse.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/hcl.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/terraform.min.js"></script>
+    <script>
+      if (window.hljs) {
+        window.hljs.configure({ languages: ['terraform','hcl'], ignoreUnescapedHTML: true });
+        // In case any static code blocks exist before renderer.js runs
+        document.querySelectorAll('pre code').forEach((el) => {
+          try { window.hljs.highlightElement(el); } catch (e) {}
+        });
+      }
+    </script>
     <script src="renderer.js"></script>
   </body>
   </html>
