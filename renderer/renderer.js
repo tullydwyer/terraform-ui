@@ -763,7 +763,6 @@ async function buildGraph() {
           const modInputs = call.expressions || {};
           for (const inputName of Object.keys(modInputs)) {
             const moduleVarId = `${nextPrefix}.var.${inputName}`;
-            if (!nodeMap.has(moduleVarId)) nodeMap.set(moduleVarId, { id: moduleVarId, type: 'variable', planned: false, inputs: new Set() });
             const refs = (modInputs[inputName].references || []).filter(Boolean);
             refs.forEach((ref) => {
               const a = normalizeRefToAddress(ref);
@@ -789,6 +788,39 @@ async function buildGraph() {
 
   // (DOT graph fallback disabled; plan/state JSON provide sufficient data for edges)
 
+  // Collapse variable nodes by rewiring edges across them, removing var.* nodes entirely
+  try {
+    const isVarId = (id) => typeof id === 'string' && (id.startsWith('var.') || id.includes('.var.'));
+    const incomingBy = new Map(); // varId -> [sourceId]
+    const outgoingBy = new Map(); // varId -> [targetId]
+    for (const e of edges) {
+      if (isVarId(e.to)) {
+        const arr = incomingBy.get(e.to) || [];
+        arr.push(e.from);
+        incomingBy.set(e.to, arr);
+      }
+      if (isVarId(e.from)) {
+        const arr = outgoingBy.get(e.from) || [];
+        arr.push(e.to);
+        outgoingBy.set(e.from, arr);
+      }
+    }
+    const varIds = new Set([...incomingBy.keys(), ...outgoingBy.keys()]);
+    const spliced = [];
+    varIds.forEach((v) => {
+      const sources = incomingBy.get(v) || [];
+      const targets = outgoingBy.get(v) || [];
+      for (const s of sources) {
+        for (const t of targets) {
+          if (!isVarId(s) && !isVarId(t)) spliced.push({ from: s, to: t });
+        }
+      }
+    });
+    // Keep only non-variable edges, then add spliced ones (dedup happens later)
+    const kept = edges.filter((e) => !isVarId(e.from) && !isVarId(e.to));
+    edges.splice(0, edges.length, ...kept, ...spliced);
+  } catch (_) {}
+
   // Ensure we have nodes for all module/variable endpoints referenced by edges (including module.<path>.var.<name>)
   for (const { from, to } of edges) {
     if (from.startsWith('module.') && !nodeMap.has(from.split('.', 2).slice(0, 2).join('.'))) {
@@ -796,9 +828,6 @@ async function buildGraph() {
     }
     if (to.startsWith('module.') && !nodeMap.has(to.split('.', 2).slice(0, 2).join('.'))) {
       nodeMap.set(to.split('.', 2).slice(0, 2).join('.'), { id: to.split('.', 2).slice(0, 2).join('.'), type: 'module', planned: false, inputs: new Set() });
-    }
-    if ((from.startsWith('var.') || from.includes('.var.')) && !nodeMap.has(from)) {
-      nodeMap.set(from, { id: from, type: 'variable', planned: false, inputs: new Set() });
     }
   }
 
@@ -830,7 +859,7 @@ function renderGraph() {
       style: [
         { selector: 'node', style: { 'background-color': '#111827', 'label': 'data(label)', 'font-family': 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace', 'font-size': 11, 'text-wrap': 'wrap', 'text-max-width': 240, 'color': '#d1d5db', 'border-width': 1, 'border-color': '#374151', 'shape': 'rectangle', 'text-valign': 'center', 'text-halign': 'center', 'width': 'label', 'height': 'label', 'padding': 8 } },
         { selector: 'node[type = "module"]', style: { 'background-color': '#1f2937', 'border-color': '#374151', 'label': 'data(label)', 'text-valign': 'center', 'text-halign': 'center', 'padding': 12 } },
-        { selector: 'node[type = "variable"]', style: { 'background-color': '#0f172a', 'border-color': '#334155' } },
+        // variable nodes no longer rendered
         { selector: 'node[planned = "true"]', style: { 'border-style': 'dashed' } },
         { selector: 'edge', style: { 'curve-style': 'bezier', 'target-arrow-shape': 'triangle', 'line-color': '#6b7280', 'target-arrow-color': '#6b7280', 'width': 1 } },
         { selector: 'node[change = "create"]', style: { 'color': '#10b981', 'border-color': '#10b981' } },
