@@ -80,6 +80,7 @@
     </main>
 
     <div id="context-menu" class="context-menu hidden">
+      <div class="menu-item" data-action="import">Import existing (terraform import)</div>
       <div class="menu-item" data-action="rename">Rename (state mv)</div>
       <div class="menu-item danger" data-action="remove">Remove from state</div>
       <div class="menu-item" data-action="show">Show state (terraform state show)</div>
@@ -95,6 +96,19 @@
         <div class="modal-actions">
           <button id="btn-rename-cancel">Cancel</button>
           <button id="btn-rename-ok" class="primary">Rename</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Import Modal -->
+    <div id="import-modal" class="modal hidden">
+      <div class="modal-dialog">
+        <div class="modal-title">Import existing resource (terraform import)</div>
+        <input id="import-address" placeholder="Terraform address (e.g. aws_instance.web[0])" />
+        <input id="import-id" placeholder="Import ID (provider-specific format)" />
+        <div class="modal-actions">
+          <button id="btn-import-cancel">Cancel</button>
+          <button id="btn-import-ok" class="primary">Import</button>
         </div>
       </div>
     </div>

@@ -28,6 +28,12 @@ const ui = {
   renameInput: document.getElementById('rename-input'),
   btnRenameOk: document.getElementById('btn-rename-ok'),
   btnRenameCancel: document.getElementById('btn-rename-cancel'),
+  // Import modal
+  importModal: document.getElementById('import-modal'),
+  importAddress: document.getElementById('import-address'),
+  importIdInput: document.getElementById('import-id'),
+  btnImportOk: document.getElementById('btn-import-ok'),
+  btnImportCancel: document.getElementById('btn-import-cancel'),
   // (state refactor/import controls removed from Inspect tab)
   mvSrc: document.getElementById('mv-src'),
   mvDst: document.getElementById('mv-dst'),
@@ -1023,6 +1029,21 @@ function showContextMenu(x, y, address) {
   ui.contextMenu.style.top = y + 'px';
   ui.contextMenu.classList.remove('hidden');
   ui.contextMenu.dataset.address = address;
+  // Enable/disable items contextually
+  const isModule = String(address).startsWith('module.');
+  const base = baseAddress(address);
+  const inState = (state.resources || []).some((r) => baseAddress(r) === base);
+  const node = state.graph.nodes.find((n) => n.id === base && (n.type || 'resource') === 'resource');
+  const change = (node && node.change) || '';
+  // Import should be enabled only when this is a planned create and not present in state
+  const importItem = ui.contextMenu.querySelector('.menu-item[data-action="import"]');
+  if (importItem) {
+    // Allow import whenever there is a planned create for this address (base),
+    // even if some instances already exist in state.
+    const canImport = !isModule && change === 'create';
+    importItem.classList.toggle('disabled', !canImport);
+    importItem.title = canImport ? '' : 'Available only for planned create resources not yet in state';
+  }
 }
 
 function hideContextMenu() {
@@ -1040,6 +1061,21 @@ function showRenameModal(defaultAddress) {
 function hideRenameModal() {
   ui.renameModal.classList.add('hidden');
   ui.renameModal.dataset.source = '';
+}
+
+function showImportModal(defaultAddress) {
+  if (!ui.importModal) return;
+  ui.importModal.dataset.address = defaultAddress || '';
+  if (ui.importAddress) ui.importAddress.value = defaultAddress || '';
+  if (ui.importIdInput) ui.importIdInput.value = '';
+  ui.importModal.classList.remove('hidden');
+  setTimeout(() => ui.importAddress && ui.importAddress.focus(), 0);
+}
+
+function hideImportModal() {
+  if (!ui.importModal) return;
+  ui.importModal.classList.add('hidden');
+  ui.importModal.dataset.address = '';
 }
 
 function wireContextMenu() {
@@ -1071,6 +1107,8 @@ function wireContextMenu() {
       if (text) {
         ui.resourceDetails.textContent = text;
       }
+    } else if (action === 'import') {
+      showImportModal(address);
     } else if (action === 'collapse-module') {
       if (!cy) return;
       const n = cy.getElementById(address);
@@ -1230,6 +1268,26 @@ function wireEvents() {
     } else if (ev.key === 'Escape') {
       hideRenameModal();
     }
+  });
+
+  // Import modal actions
+  if (ui.btnImportCancel) ui.btnImportCancel.addEventListener('click', hideImportModal);
+  if (ui.btnImportOk) ui.btnImportOk.addEventListener('click', async () => {
+    const address = (ui.importAddress && ui.importAddress.value || ui.importModal.dataset.address || '').trim();
+    const id = (ui.importIdInput && ui.importIdInput.value || '').trim();
+    hideImportModal();
+    if (!address || !id) return;
+    const varFiles = getSelectedVarFilesArray();
+    await withLogs(() => window.api.importResource(state.cwd, address, id, { varFiles }));
+    await refreshResources();
+  });
+  if (ui.importAddress) ui.importAddress.addEventListener('keydown', (ev) => {
+    if (ev.key === 'Enter') ui.btnImportOk && ui.btnImportOk.click();
+    else if (ev.key === 'Escape') hideImportModal();
+  });
+  if (ui.importIdInput) ui.importIdInput.addEventListener('keydown', (ev) => {
+    if (ev.key === 'Enter') ui.btnImportOk && ui.btnImportOk.click();
+    else if (ev.key === 'Escape') hideImportModal();
   });
 }
 
