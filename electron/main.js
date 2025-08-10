@@ -600,6 +600,32 @@ ipcMain.handle('terraform:tfvars:list', async (_e, cwd) => {
   }
 });
 
+// Persist selection of tfvars per workspace path
+ipcMain.handle('tfvars:selection:get', async (_e, cwd) => {
+  try {
+    const cfg = readConfig();
+    const all = cfg.tfvarsSelections || {};
+    const key = String(cwd || '');
+    const selected = Array.isArray(all[key]) ? all[key] : [];
+    return { files: selected };
+  } catch (err) {
+    return { files: [], error: String(err && err.message ? err.message : err) };
+  }
+});
+
+ipcMain.handle('tfvars:selection:set', async (_e, cwd, files) => {
+  try {
+    const cfg = readConfig();
+    if (!cfg.tfvarsSelections) cfg.tfvarsSelections = {};
+    const key = String(cwd || '');
+    cfg.tfvarsSelections[key] = Array.isArray(files) ? files.filter(Boolean) : [];
+    writeConfig(cfg);
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: String(err && err.message ? err.message : err) };
+  }
+});
+
 // Log history IPC
 ipcMain.handle('logs:history:list', async () => {
   try {

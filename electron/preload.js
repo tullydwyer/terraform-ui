@@ -25,6 +25,10 @@ contextBridge.exposeInMainWorld('api', {
   selectWorkspaceName: (cwd, name) => ipcRenderer.invoke('terraform:workspace:select', cwd, name),
   listTfvars: (cwd) => ipcRenderer.invoke('terraform:tfvars:list', cwd),
 
+  // Persisted tfvars selections per workspace
+  getTfvarsSelection: (cwd) => ipcRenderer.invoke('tfvars:selection:get', cwd),
+  setTfvarsSelection: (cwd, files) => ipcRenderer.invoke('tfvars:selection:set', cwd, files),
+
   // Logs history
   listHistory: () => ipcRenderer.invoke('logs:history:list'),
   getHistoryItem: (id) => ipcRenderer.invoke('logs:history:get', id),

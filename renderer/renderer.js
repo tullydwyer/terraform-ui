@@ -357,6 +357,8 @@ function renderTfvarsList() {
       if (cb.checked) state.selectedVarFiles.add(filePath);
       else state.selectedVarFiles.delete(filePath);
       updateTfvarsSummaryCount();
+      // Persist selection for this workspace
+      try { window.api.setTfvarsSelection(state.cwd, Array.from(state.selectedVarFiles)); } catch (_) {}
     });
     const span = document.createElement('span');
     span.className = 'tfvar-path';
@@ -394,6 +396,15 @@ async function refreshWorkspaceMeta() {
     state.availableTfvars = (res && res.files) || [];
   } catch (_) {
     state.availableTfvars = [];
+  }
+  // Load persisted tfvars selection for this workspace and intersect with available files
+  try {
+    const saved = await window.api.getTfvarsSelection(state.cwd);
+    const savedFiles = (saved && saved.files) || [];
+    const availableSet = new Set(state.availableTfvars);
+    state.selectedVarFiles = new Set(savedFiles.filter((f) => availableSet.has(f)));
+  } catch (_) {
+    // leave current selection as-is on failure
   }
   renderTfvarsList();
 }
