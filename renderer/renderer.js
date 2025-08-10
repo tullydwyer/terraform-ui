@@ -57,6 +57,9 @@ let state = {
   selectedVarFiles: new Set(),
   sidebarWidthPx: 320,
   logsHeightPct: 40,
+  // Track expanded/collapsed modules in Resources sidebar
+  expandedModules: new Set(),
+  knownModules: new Set(),
 };
 
 let cy = null;
@@ -409,91 +412,200 @@ async function withLogs(task) {
 
 function renderResources() {
   ui.resourcesList.innerHTML = '';
-  const addedBases = new Set();
-  // First: existing resources from state
-  state.resources.forEach((addr) => {
-    const li = document.createElement('li');
-    li.dataset.address = addr;
-    const [type, ...rest] = addr.split('.');
-    const name = rest.join('.');
+
+  // Helper: derive type/name for display after stripping module prefixes
+  const getTypeAndName = (addr) => {
+    let s = String(addr);
+    if (s.startsWith('module.')) {
+      const parts = s.split('.');
+      let i = 0;
+      while (i < parts.length && parts[i] === 'module' && i + 1 < parts.length) i += 2;
+      s = parts.slice(i).join('.');
+    }
+    const p = s.split('.');
+    if (p[0] === 'data') {
+      return { type: `${p[0]}.${p[1]}`, name: p.slice(2).join('.') };
+    }
+    return { type: p[0], name: p.slice(1).join('.') };
+  };
+
+  // Build resource entries: union of existing and planned-only (with change info)
+  const existingBases = new Set(state.resources.map(baseAddress));
+  const changeBy = new Map(state.graph.nodes
+    .filter((n) => (n.type || 'resource') === 'resource' && n.change)
+    .map((n) => [n.id, n.change]));
+
+  const collectResourceEntry = (addr) => {
     const base = baseAddress(addr);
-    addedBases.add(base);
-    const node = state.graph.nodes.find((n) => n.id === base && (n.type || 'resource') === 'resource');
+    const node = state.graph.nodes.find((n) => (n.type || 'resource') === 'resource' && n.id === base);
     const change = (node && node.change) || '';
-    let marker = '';
-    if (change === 'create') marker = '+';
-    else if (change === 'delete') marker = '-';
-    else if (change === 'modify') marker = '~';
-    else if (change === 'replace') marker = '-/+';
-    let changeLabel = '';
-    if (change === 'create') changeLabel = 'will be created';
-    else if (change === 'delete') changeLabel = 'will be deleted';
-    else if (change === 'modify') changeLabel = 'will be modified';
-    else if (change === 'replace') changeLabel = 'will be recreated';
-    li.classList.add(`change-${change || 'none'}`);
-    li.innerHTML = `
-      <span class="marker">${marker || ''}</span>
-      <div>
-        <span class="resource-id"><span class="resource-type">${type}</span>.<span class="resource-name">${name}</span></span>
-        ${changeLabel ? `<div class="resource-change">${changeLabel}</div>` : ''}
-      </div>
-    `;
-    li.addEventListener('click', async () => {
-      document.querySelectorAll('.resources-list li').forEach((el) => el.classList.remove('active'));
-      li.classList.add('active');
-      state.selectedAddress = addr;
-      await loadResourceDetails(addr);
+    return { addr, base, change };
+  };
+
+  const resourceMap = new Map(); // base -> entry with possibly representative addr
+  // Existing state resources (include instances as-is)
+  state.resources.forEach((addr) => {
+    const base = baseAddress(addr);
+    if (!resourceMap.has(base)) resourceMap.set(base, collectResourceEntry(addr));
+  });
+  // Planned-only resources (that are not present in state)
+  state.graph.nodes
+    .filter((n) => (n.type || 'resource') === 'resource' && !existingBases.has(n.id))
+    .forEach((n) => {
+      if (!resourceMap.has(n.id)) resourceMap.set(n.id, { addr: n.id, base: n.id, change: n.change || (n.planned ? 'create' : '') });
     });
-    li.addEventListener('contextmenu', (e) => {
-      e.preventDefault();
-      const x = e.pageX || (e.clientX + window.scrollX);
-      const y = e.pageY || (e.clientY + window.scrollY);
-      showContextMenu(x, y, addr);
-    });
-    ui.resourcesList.appendChild(li);
+
+  // Build module tree structure
+  const modules = new Set(state.graph.nodes.filter((n) => (n.type || 'resource') === 'module' || n.type === 'module').map((n) => n.id));
+  // Ensure parent module nodes exist for any deeper module ids
+  Array.from(modules).forEach((mid) => {
+    const parts = mid.split('.');
+    for (let i = 2; i < parts.length; i += 2) {
+      const parent = parts.slice(0, i).join('.');
+      if (parent.startsWith('module.') && !modules.has(parent)) modules.add(parent);
+    }
   });
 
-  // Then: planned-only resources that are not yet in state
-  const plannedOnly = state.graph.nodes.filter((n) => (n.type || 'resource') === 'resource' && (n.planned || (n.change && n.change !== '')) && !addedBases.has(n.id));
-  plannedOnly.forEach((n) => {
-    const li = document.createElement('li');
-    const addr = n.id;
-    li.dataset.address = addr;
-    const [type, ...rest] = addr.split('.');
-    const name = rest.join('.');
-    const change = n.change || (n.planned ? 'create' : '');
-    let marker = '';
-    if (change === 'create') marker = '+';
-    else if (change === 'delete') marker = '-';
-    else if (change === 'modify') marker = '~';
-    else if (change === 'replace') marker = '-/+';
-    let changeLabel = '';
-    if (change === 'create') changeLabel = 'will be created';
-    else if (change === 'delete') changeLabel = 'will be deleted';
-    else if (change === 'modify') changeLabel = 'will be modified';
-    else if (change === 'replace') changeLabel = 'will be recreated';
-    li.classList.add(`change-${change || 'none'}`);
-    li.innerHTML = `
-      <span class="marker">${marker || ''}</span>
-      <div>
-        <span class="resource-id"><span class="resource-type">${type}</span>.<span class="resource-name">${name}</span></span>
-        ${changeLabel ? `<div class="resource-change">${changeLabel}</div>` : ''}
-      </div>
-    `;
-    li.addEventListener('click', async () => {
-      document.querySelectorAll('.resources-list li').forEach((el) => el.classList.remove('active'));
-      li.classList.add('active');
-      state.selectedAddress = addr;
-      await loadResourceDetails(addr);
-    });
-    li.addEventListener('contextmenu', (e) => {
-      e.preventDefault();
-      const x = e.pageX || (e.clientX + window.scrollX);
-      const y = e.pageY || (e.clientY + window.scrollY);
-      showContextMenu(x, y, addr);
-    });
-    ui.resourcesList.appendChild(li);
+  const tree = new Map(); // id -> { id, childrenModules:Set, resources:[] }
+  const ensureModuleNode = (id) => {
+    const key = id || '';
+    if (!tree.has(key)) tree.set(key, { id: key, childrenModules: new Set(), resources: [] });
+    return tree.get(key);
+  };
+  // Root container
+  ensureModuleNode('');
+
+  // Create module nodes and parent-child relations
+  modules.forEach((mid) => {
+    ensureModuleNode(mid);
+    const parts = mid.split('.');
+    let parent = '';
+    if (parts.length > 2) {
+      parent = parts.slice(0, parts.length - 2).join('.');
+    }
+    ensureModuleNode(parent).childrenModules.add(mid);
   });
+
+  // Assign resources to their module container
+  for (const entry of resourceMap.values()) {
+    const mod = getModulePrefixFromAddress(entry.base);
+    ensureModuleNode(mod).resources.push(entry);
+  }
+
+  // Initialize expansion defaults for modules never seen before
+  tree.forEach((node, id) => {
+    if (!id) return; // skip root
+    if (!state.knownModules.has(id)) {
+      state.knownModules.add(id);
+      state.expandedModules.add(id); // default expanded on first discovery
+    }
+  });
+
+  // Render recursively
+  const renderModule = (id, container) => {
+    const node = tree.get(id);
+    if (!node) return;
+
+    // Sort children modules by id for stability
+    const childrenMods = Array.from(node.childrenModules).sort((a, b) => a.localeCompare(b));
+    const resources = node.resources.slice().sort((a, b) => a.base.localeCompare(b.base));
+
+    // If this is not root, render a module header item
+    let moduleChildrenContainer = container;
+    if (id) {
+      // Aggregate change markers from descendant resources
+      const aggregate = { create: 0, delete: 0, modify: 0, replace: 0 };
+      const collectAgg = (mid) => {
+        const mnode = tree.get(mid);
+        if (mnode) {
+          mnode.resources.forEach((r) => {
+            if (r.change && aggregate.hasOwnProperty(r.change)) aggregate[r.change] += 1;
+          });
+          mnode.childrenModules.forEach(collectAgg);
+        }
+      };
+      collectAgg(id);
+
+      const li = document.createElement('li');
+      li.className = 'module-item';
+      li.dataset.address = id;
+      const expanded = state.expandedModules.has(id);
+      const counts = Object.entries(aggregate).filter(([_, v]) => v > 0).map(([k, v]) => `${k[0]}${v}`).join(' ');
+      li.innerHTML = `
+        <span class="chevron">${expanded ? '▾' : '▸'}</span>
+        <div class="module-header">
+          <span class="module-id">${id}</span>
+          ${counts ? `<span class="module-badges">${counts}</span>` : ''}
+        </div>
+      `;
+      li.addEventListener('mousedown', (e) => {
+        // Left-click toggles; prevent text selection quirks
+        if (e.button !== 0) return;
+        e.preventDefault();
+        if (state.expandedModules.has(id)) state.expandedModules.delete(id);
+        else state.expandedModules.add(id);
+        renderResources();
+      });
+      li.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+        const x = e.pageX || (e.clientX + window.scrollX);
+        const y = e.pageY || (e.clientY + window.scrollY);
+        showContextMenu(x, y, id);
+      });
+      container.appendChild(li);
+
+      // Children container
+      const ul = document.createElement('ul');
+      ul.className = 'resources-sublist';
+      ul.style.display = expanded ? '' : 'none';
+      container.appendChild(ul);
+      moduleChildrenContainer = ul;
+    }
+
+    // Render child modules
+    childrenMods.forEach((mid) => renderModule(mid, moduleChildrenContainer));
+
+    // Render resources in this module
+    resources.forEach((entry) => {
+      const li = document.createElement('li');
+      li.dataset.address = entry.addr;
+      const { type, name } = getTypeAndName(entry.base);
+      const change = entry.change || '';
+      let marker = '';
+      if (change === 'create') marker = '+';
+      else if (change === 'delete') marker = '-';
+      else if (change === 'modify') marker = '~';
+      else if (change === 'replace') marker = '-/+';
+      let changeLabel = '';
+      if (change === 'create') changeLabel = 'will be created';
+      else if (change === 'delete') changeLabel = 'will be deleted';
+      else if (change === 'modify') changeLabel = 'will be modified';
+      else if (change === 'replace') changeLabel = 'will be recreated';
+      li.classList.add(`change-${change || 'none'}`);
+      li.innerHTML = `
+        <span class="marker">${marker || ''}</span>
+        <div>
+          <span class="resource-id"><span class="resource-type">${type}</span>.<span class="resource-name">${name}</span></span>
+          ${changeLabel ? `<div class="resource-change">${changeLabel}</div>` : ''}
+        </div>
+      `;
+      li.addEventListener('click', async () => {
+        document.querySelectorAll('.resources-list li').forEach((el) => el.classList.remove('active'));
+        li.classList.add('active');
+        state.selectedAddress = entry.addr;
+        await loadResourceDetails(entry.addr);
+      });
+      li.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+        const x = e.pageX || (e.clientX + window.scrollX);
+        const y = e.pageY || (e.clientY + window.scrollY);
+        showContextMenu(x, y, entry.addr);
+      });
+      moduleChildrenContainer.appendChild(li);
+    });
+  };
+
+  renderModule('', ui.resourcesList);
 }
 
 async function refreshResources() {
@@ -1044,6 +1156,17 @@ function showContextMenu(x, y, address) {
     importItem.classList.toggle('disabled', !canImport);
     importItem.title = canImport ? '' : 'Available only for planned create resources not yet in state';
   }
+  // Collapse/Expand items enabled only for modules
+  const collapseItem = ui.contextMenu.querySelector('.menu-item[data-action="collapse-module"]');
+  const expandItem = ui.contextMenu.querySelector('.menu-item[data-action="expand-module"]');
+  if (collapseItem) {
+    collapseItem.classList.toggle('disabled', !isModule);
+    collapseItem.title = isModule ? '' : 'Only applicable to modules';
+  }
+  if (expandItem) {
+    expandItem.classList.toggle('disabled', !isModule);
+    expandItem.title = isModule ? '' : 'Only applicable to modules';
+  }
 }
 
 function hideContextMenu() {
@@ -1110,13 +1233,27 @@ function wireContextMenu() {
     } else if (action === 'import') {
       showImportModal(address);
     } else if (action === 'collapse-module') {
-      if (!cy) return;
-      const n = cy.getElementById(address);
-      if (n && n.data('type') === 'module') toggleModuleCollapse(n);
+      // Resources sidebar collapse
+      if (String(address).startsWith('module.')) {
+        state.expandedModules.delete(address);
+        renderResources();
+      }
+      // Graph collapse (if present)
+      if (cy) {
+        const n = cy.getElementById(address);
+        if (n && n.data('type') === 'module') toggleModuleCollapse(n);
+      }
     } else if (action === 'expand-module') {
-      if (!cy) return;
-      const n = cy.getElementById(address);
-      if (n && n.data('type') === 'module') toggleModuleCollapse(n);
+      // Resources sidebar expand
+      if (String(address).startsWith('module.')) {
+        state.expandedModules.add(address);
+        renderResources();
+      }
+      // Graph expand (if present)
+      if (cy) {
+        const n = cy.getElementById(address);
+        if (n && n.data('type') === 'module') toggleModuleCollapse(n);
+      }
     }
   });
 }
@@ -1238,12 +1375,35 @@ function wireEvents() {
     const matchingInstances = (state.resources || []).filter((r) => baseAddress(r) === base);
 
     let movePairs = [];
-    if (!isModule && !hasIndex && matchingInstances.length > 1) {
+    if (isModule) {
+      // Rename a module call by moving every state object whose address starts with this module path
+      const escapeReg = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const modPrefix = address; // e.g., module.a or module.a.module.b
+      const re = new RegExp(`^${escapeReg(modPrefix)}(\\[[^\\]]+\\])?\\\.`);
+      const affected = (state.resources || []).filter((r) => re.test(r));
+      // If nothing directly matched, also consider baseAddress on state items (defensive)
+      if (affected.length === 0) {
+        const reBase = new RegExp(`^${escapeReg(base)}(\\[[^\\]]+\\])?\\\.`);
+        affected.push(...(state.resources || []).filter((r) => reBase.test(baseAddress(r) + (r.endsWith(']') ? '' : ''))));
+      }
+      // Build pairs preserving instance key if present immediately after the module
+      movePairs = affected.map((src) => {
+        const m = src.match(re);
+        const instancePart = m && m[1] ? m[1] : '';
+        const remainder = src.slice((m ? m[0].length : (modPrefix + '.').length));
+        const dst = `${dest}${instancePart}.${remainder}`;
+        return [src, dst];
+      });
+      if (movePairs.length === 0) {
+        alert('No state objects found under this module to move.');
+        return;
+      }
+    } else if (!hasIndex && matchingInstances.length > 1) {
       movePairs = matchingInstances.map((src) => {
         const suffix = src.slice(base.length);
         return [src, dest + suffix];
       });
-    } else if (!isModule && !hasIndex && matchingInstances.length === 1) {
+    } else if (!hasIndex && matchingInstances.length === 1) {
       const only = matchingInstances[0];
       const suffix = only.slice(base.length);
       movePairs = [[only, dest + suffix]];

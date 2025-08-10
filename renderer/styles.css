@@ -162,6 +162,15 @@ button.danger { background: #7f1d1d; border-color: #6b1616; }
 /* Subtext for planned action under resource id */
 .resource-change { color: var(--muted); font-size: 11px; margin-top: 2px; }
 
+/* Nested module containers */
+.resources-sublist { list-style: none; padding-left: 14px; margin: 6px 0 6px 12px; border-left: 1px dashed #2a2a33; display: block; }
+.resources-sublist > li { margin-left: 0; }
+.module-item { display: grid; grid-template-columns: 16px 1fr; align-items: center; column-gap: 8px; padding: 6px 8px; margin: 6px 0; background: #0f172a; border: 1px solid #2a3750; border-radius: 4px; }
+.module-item .chevron { width: 16px; text-align: center; color: #9ca3af; }
+.module-item .module-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.module-item .module-id { color: #cbd5e1; font-weight: 600; }
+.module-item .module-badges { color: #9ca3af; font-size: 11px; background: #0b1220; border: 1px solid #22314f; padding: 2px 6px; border-radius: 999px; }
+
 .details-pre, .logs-pre {
   margin: 0;
   background: var(--surface);
