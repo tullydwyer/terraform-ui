@@ -10,6 +10,120 @@ const { spawn } = require('child_process');
 const userDataDir = app.getPath('userData');
 const configFilePath = path.join(userDataDir, 'config.json');
 
+// Persistent Terraform command history (metadata + log files)
+const historyDir = path.join(userDataDir, 'history');
+const historyLogsDir = path.join(historyDir, 'logs');
+const historyIndexPath = path.join(historyDir, 'index.json');
+const HISTORY_LIMIT = 200; // keep last N records
+
+/**
+ * In-memory index of history items
+ * Each item: { id, label, cwd, args, startAt, endAt, exitCode }
+ */
+let historyIndex = [];
+
+function ensureHistoryStorage() {
+  try {
+    fs.mkdirSync(historyLogsDir, { recursive: true });
+    if (!fs.existsSync(historyIndexPath)) {
+      fs.writeFileSync(historyIndexPath, JSON.stringify({ items: [] }, null, 2), 'utf-8');
+    }
+  } catch (err) {
+    console.error('Failed to ensure history storage:', err);
+  }
+}
+
+function loadHistoryIndex() {
+  ensureHistoryStorage();
+  try {
+    const raw = fs.readFileSync(historyIndexPath, 'utf-8');
+    const obj = JSON.parse(raw || '{}');
+    historyIndex = Array.isArray(obj.items) ? obj.items : [];
+  } catch (err) {
+    console.error('Failed to load history index:', err);
+    historyIndex = [];
+  }
+}
+
+function saveHistoryIndex() {
+  try {
+    fs.writeFileSync(historyIndexPath, JSON.stringify({ items: historyIndex }, null, 2), 'utf-8');
+  } catch (err) {
+    console.error('Failed to save history index:', err);
+  }
+}
+
+function getLogPathForId(id) {
+  return path.join(historyLogsDir, `${id}.log`);
+}
+
+function pruneHistoryIfNeeded() {
+  try {
+    if (historyIndex.length <= HISTORY_LIMIT) return;
+    // sort by startAt (asc) and remove oldest beyond limit
+    historyIndex.sort((a, b) => new Date(a.startAt).getTime() - new Date(b.startAt).getTime());
+    const toRemove = historyIndex.splice(0, historyIndex.length - HISTORY_LIMIT);
+    saveHistoryIndex();
+    // best-effort delete old log files
+    toRemove.forEach((it) => {
+      try { fs.unlinkSync(getLogPathForId(it.id)); } catch (_) {}
+    });
+  } catch (err) {
+    console.error('Failed to prune history:', err);
+  }
+}
+
+function createHistoryRecord(label, cwd) {
+  try {
+    const id = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+    const item = { id, label: String(label || ''), cwd: String(cwd || ''), args: [], startAt: new Date().toISOString(), endAt: null, exitCode: null };
+    historyIndex.push(item);
+    // keep index relatively sorted by start time desc for convenience
+    historyIndex.sort((a, b) => new Date(b.startAt).getTime() - new Date(a.startAt).getTime());
+    saveHistoryIndex();
+    pruneHistoryIfNeeded();
+    // ensure empty file exists
+    fs.writeFileSync(getLogPathForId(id), '', 'utf-8');
+    return id;
+  } catch (err) {
+    console.error('Failed to create history record:', err);
+    return null;
+  }
+}
+
+function setHistoryArgs(id, args) {
+  try {
+    const it = historyIndex.find((x) => x.id === id);
+    if (!it) return;
+    it.args = Array.isArray(args) ? args : [];
+    saveHistoryIndex();
+  } catch (_) {}
+}
+
+function appendHistoryLog(id, stream, message) {
+  if (!id) return;
+  try {
+    const prefix = stream === 'stderr' ? '[err] ' : '';
+    fs.appendFileSync(getLogPathForId(id), prefix + String(message || ''), 'utf-8');
+  } catch (err) {
+    // ignore append failures; do not crash the app
+  }
+}
+
+function finalizeHistoryRecord(id, exitCode) {
+  try {
+    const it = historyIndex.find((x) => x.id === id);
+    if (!it) return;
+    it.exitCode = typeof exitCode === 'number' ? exitCode : Number(exitCode) || 0;
+    it.endAt = new Date().toISOString();
+    // also append exit code line to the log file for completeness
+    try { fs.appendFileSync(getLogPathForId(id), `\n[exit code ${it.exitCode}]\n`, 'utf-8'); } catch (_) {}
+    saveHistoryIndex();
+  } catch (err) {
+    console.error('Failed to finalize history record:', err);
+  }
+}
+
 function readConfig() {
   try {
     if (fs.existsSync(configFilePath)) {
@@ -63,6 +177,8 @@ function createWindow() {
 
 app.whenReady().then(() => {
   createWindow();
+  // Load command history index and ensure storage exists
+  loadHistoryIndex();
 
   app.on('activate', function () {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
@@ -102,6 +218,10 @@ function runTerraformStreamed(workingDirectory, args) {
         stderr += message;
         if (stderr.length > MAX_BUFFER) stderr = stderr.slice(stderr.length - MAX_BUFFER);
       }
+      // Also append to the current history record if present
+      if (currentHistoryId) {
+        appendHistoryLog(currentHistoryId, stream, message);
+      }
       if (mainWindow && !mainWindow.isDestroyed()) {
         mainWindow.webContents.send('terraform:log', { stream, message });
       }
@@ -109,6 +229,9 @@ function runTerraformStreamed(workingDirectory, args) {
 
     child.stdout.on('data', (d) => sendLog(d, 'stdout'));
     child.stderr.on('data', (d) => sendLog(d, 'stderr'));
+
+    // Record the args used for this command on the history item
+    try { if (currentHistoryId) setHistoryArgs(currentHistoryId, args); } catch (_) {}
 
     child.on('error', (err) => {
       const hint = err && err.code === 'ENOENT'
@@ -132,19 +255,25 @@ function runTerraformStreamed(workingDirectory, args) {
 
 // Global serialization for Terraform commands (queue/mutex)
 let terraformLock = Promise.resolve();
+let currentHistoryId = null; // ID of the history record for the currently running command (serialized)
 
 function withTerraformQueue(label, cwd, fn) {
   const run = async () => {
     try {
+      // Create a history record for this command and broadcast start
+      currentHistoryId = createHistoryRecord(label, cwd);
       if (mainWindow && !mainWindow.isDestroyed()) {
-        mainWindow.webContents.send('terraform:command', { event: 'start', label, cwd });
+        mainWindow.webContents.send('terraform:command', { event: 'start', label, cwd, id: currentHistoryId });
       }
       const res = await fn();
+      // Finalize history with exit code
+      try { if (currentHistoryId) finalizeHistoryRecord(currentHistoryId, res && typeof res.code !== 'undefined' ? res.code : 0); } catch (_) {}
       return res;
     } finally {
       if (mainWindow && !mainWindow.isDestroyed()) {
-        mainWindow.webContents.send('terraform:command', { event: 'end', label, cwd });
+        mainWindow.webContents.send('terraform:command', { event: 'end', label, cwd, id: currentHistoryId });
       }
+      currentHistoryId = null;
     }
   };
   const p = terraformLock.then(run, run);
@@ -468,6 +597,41 @@ ipcMain.handle('terraform:tfvars:list', async (_e, cwd) => {
     return { code: 0, files };
   } catch (err) {
     return { code: 1, files: [], error: String(err && err.message ? err.message : err) };
+  }
+});
+
+// Log history IPC
+ipcMain.handle('logs:history:list', async () => {
+  try {
+    // Return shallow copy sorted by startAt desc
+    const items = historyIndex.slice().sort((a, b) => new Date(b.startAt).getTime() - new Date(a.startAt).getTime());
+    return { items };
+  } catch (err) {
+    return { items: [], error: String(err && err.message ? err.message : err) };
+  }
+});
+
+ipcMain.handle('logs:history:get', async (_e, id) => {
+  try {
+    const item = historyIndex.find((x) => x.id === id) || null;
+    if (!item) return { item: null, text: '', error: 'Not found' };
+    let text = '';
+    try { text = fs.readFileSync(getLogPathForId(id), 'utf-8'); } catch (_) { text = ''; }
+    return { item, text };
+  } catch (err) {
+    return { item: null, text: '', error: String(err && err.message ? err.message : err) };
+  }
+});
+
+ipcMain.handle('logs:history:clear', async () => {
+  try {
+    // best-effort clear
+    historyIndex.forEach((it) => { try { fs.unlinkSync(getLogPathForId(it.id)); } catch (_) {} });
+    historyIndex = [];
+    saveHistoryIndex();
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: String(err && err.message ? err.message : err) };
   }
 });
 

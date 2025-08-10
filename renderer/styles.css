@@ -282,6 +282,13 @@ button.danger { background: #fee2e2; border-color: #fecaca; color: #991b1b; }
 .logs.collapsed .logs-pre { display: none; }
 .logs-controls { display: flex; gap: 6px; align-items: center; }
 .icon-btn { padding: 2px 8px; }
+.logs-controls select {
+  background: #ffffff;
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 6px 8px;
+}
 
 .form-row { display: grid; grid-template-columns: 70px 1fr 1fr auto; gap: 8px; align-items: center; margin-bottom: 8px; }
 .form-row input {

@@ -13,6 +13,8 @@ const ui = {
   resourcesList: document.getElementById('resources-list'),
   resourceDetails: document.getElementById('resource-details'),
   logsPre: document.getElementById('logs-pre'),
+  historySelect: document.getElementById('history-select'),
+  btnClearHistory: document.getElementById('btn-clear-history'),
   // Tabs & Graph
   tabInspect: document.getElementById('tab-inspect'),
   tabGraph: document.getElementById('tab-graph'),
@@ -60,6 +62,9 @@ let state = {
   expandedModules: new Set(),
   knownModules: new Set(),
   resourcesFilter: '',
+  // Logs/history state
+  historyItems: [],
+  selectedHistoryId: '',
 };
 
 let cy = null;
@@ -265,6 +270,8 @@ async function pickWorkspace() {
 }
 
 function appendLog({ stream, message }) {
+  // If viewing a historical log, ignore live appends
+  if (state.selectedHistoryId) return;
   const prefix = stream === 'stderr' ? '[err] ' : '';
   const html = ansiToHtml(prefix + String(message || ''));
   ui.logsPre.insertAdjacentHTML('beforeend', html);
@@ -386,6 +393,58 @@ function clearLogs() {
   ui.logsPre.textContent = '';
 }
 
+function renderHistoryDropdown() {
+  const sel = ui.historySelect;
+  if (!sel) return;
+  sel.innerHTML = '';
+  // Live option
+  const optLive = document.createElement('option');
+  optLive.value = '';
+  optLive.textContent = 'Live (current)';
+  sel.appendChild(optLive);
+  // Past items
+  const items = state.historyItems || [];
+  items.forEach((it) => {
+    const time = (() => { try { return new Date(it.startAt).toLocaleTimeString(); } catch (_) { return it.startAt || ''; } })();
+    const code = (typeof it.exitCode === 'number') ? it.exitCode : (it.exitCode ?? '—');
+    const label = `${time} • ${it.label || 'terraform'} • exit ${code}`;
+    const opt = document.createElement('option');
+    opt.value = it.id;
+    opt.textContent = label;
+    opt.title = `${it.label} (${it.cwd})\n${Array.isArray(it.args) ? it.args.join(' ') : ''}`;
+    sel.appendChild(opt);
+  });
+  sel.value = state.selectedHistoryId || '';
+}
+
+async function loadHistoryList() {
+  try {
+    const res = await window.api.listHistory();
+    state.historyItems = (res && res.items) || [];
+  } catch (_) {
+    state.historyItems = [];
+  }
+  renderHistoryDropdown();
+}
+
+async function showHistoryItem(id) {
+  if (!id) {
+    state.selectedHistoryId = '';
+    clearLogs();
+    return;
+  }
+  try {
+    const res = await window.api.getHistoryItem(id);
+    state.selectedHistoryId = id;
+    const text = String((res && res.text) || '');
+    ui.logsPre.innerHTML = ansiToHtml(text);
+    ui.logsPre.scrollTop = ui.logsPre.scrollHeight;
+  } catch (_) {
+    state.selectedHistoryId = id;
+    clearLogs();
+  }
+}
+
 // Basic ANSI SGR to HTML converter for logs
 function ansiToHtml(text) {
   if (!text) return '';
@@ -456,14 +515,15 @@ function ansiToHtml(text) {
 }
 
 async function withLogs(task) {
-  clearLogs();
+  // If viewing history, don't wipe the shown logs; otherwise clear for fresh live session
+  if (!state.selectedHistoryId) clearLogs();
   const unsubscribe = window.api.onLog(appendLog);
   beginBusy();
   try {
     const result = await task();
     if (result && typeof result.code !== 'undefined') {
       const html = ansiToHtml(`\n[exit code ${result.code}]\n`);
-      ui.logsPre.insertAdjacentHTML('beforeend', html);
+      if (!state.selectedHistoryId) ui.logsPre.insertAdjacentHTML('beforeend', html);
     }
     return result;
   } finally {
@@ -1483,9 +1543,11 @@ function wireEvents() {
         const label = String(payload.label || 'terraform');
         toast.textContent = `Running: ${label}`;
         toast.classList.remove('hidden');
+        loadHistoryList();
       } else if (payload.event === 'end') {
         toast.classList.add('hidden');
         toast.textContent = '';
+        loadHistoryList();
       }
     });
   }
@@ -1577,11 +1639,30 @@ function wireEvents() {
     if (ev.key === 'Enter') ui.btnImportOk && ui.btnImportOk.click();
     else if (ev.key === 'Escape') hideImportModal();
   });
+
+  // History controls
+  if (ui.historySelect) {
+    ui.historySelect.addEventListener('change', async () => {
+      await showHistoryItem(ui.historySelect.value);
+    });
+  }
+  if (ui.btnClearHistory) {
+    ui.btnClearHistory.addEventListener('click', async () => {
+      const ok = confirm('Clear all saved command logs?');
+      if (!ok) return;
+      await window.api.clearHistory();
+      state.selectedHistoryId = '';
+      await loadHistoryList();
+      clearLogs();
+    });
+  }
 }
 
 async function boot() {
   wireEvents();
   updateLayoutSizes();
+  // Initial history load
+  await loadHistoryList();
   const saved = await window.api.getWorkspace();
   if (saved) {
     setWorkspace(saved);

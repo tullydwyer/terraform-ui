@@ -25,6 +25,11 @@ contextBridge.exposeInMainWorld('api', {
   selectWorkspaceName: (cwd, name) => ipcRenderer.invoke('terraform:workspace:select', cwd, name),
   listTfvars: (cwd) => ipcRenderer.invoke('terraform:tfvars:list', cwd),
 
+  // Logs history
+  listHistory: () => ipcRenderer.invoke('logs:history:list'),
+  getHistoryItem: (id) => ipcRenderer.invoke('logs:history:get', id),
+  clearHistory: () => ipcRenderer.invoke('logs:history:clear'),
+
   onLog: (callback) => {
     const listener = (_event, payload) => callback(payload);
     ipcRenderer.on('terraform:log', listener);
