@@ -52,6 +52,8 @@ let state = {
   resources: [],
   selectedAddress: '',
   graph: { nodes: [], edges: [] },
+  // Stores the most recent plan JSON produced by an explicit Plan action
+  latestPlanJson: null,
   graphPositions: new Map(), // address -> {x,y}
   snapshotAt: null, // ISO string when terraform state was last pulled
   terraformWorkspaces: { list: [], current: '' },
@@ -386,6 +388,8 @@ async function refreshWorkspaceMeta() {
 async function afterWorkspaceChanged() {
   await refreshWorkspaceMeta();
   await refreshResources();
+  // New workspace; any previous plan context is no longer valid
+  state.latestPlanJson = null;
 }
 
 
@@ -819,8 +823,11 @@ async function doInit() {
 async function doPlan() {
   if (!(await ensureWorkspaceSelected())) return;
   const varFiles = getSelectedVarFilesArray();
-  await withLogs(() => window.api.plan(state.cwd, { varFiles }));
-  // Rebuild from plan-json to immediately reflect planned graph
+  // Run a single plan that also yields JSON; stream logs during execution
+  const pj = await withLogs(() => window.api.planJson(state.cwd, { varFiles }));
+  // Save latest plan JSON for graph overlays until state changes or another plan is run
+  state.latestPlanJson = (pj && pj.json) || null;
+  // Rebuild graph/resources to immediately reflect planned changes
   await buildGraph();
   // Update the resources panel to reflect planned changes/markers and planned-only resources
   renderResources();
@@ -831,6 +838,8 @@ async function doApply() {
   if (!(await ensureWorkspaceSelected())) return;
   const varFiles = getSelectedVarFilesArray();
   await withLogs(() => window.api.apply(state.cwd, { varFiles }));
+  // State has changed; invalidate any previous plan overlay
+  state.latestPlanJson = null;
   await refreshResources();
   if (isGraphActive()) renderGraph();
 }
@@ -839,6 +848,8 @@ async function doRefresh() {
   if (!(await ensureWorkspaceSelected())) return;
   const varFiles = getSelectedVarFilesArray();
   await withLogs(() => window.api.refresh(state.cwd, { varFiles }));
+  // State has changed; invalidate any previous plan overlay
+  state.latestPlanJson = null;
   await refreshResources();
   if (isGraphActive()) renderGraph();
 }
@@ -851,6 +862,8 @@ async function doStateMove() {
   const dst = ui.mvDst.value.trim();
   if (!src || !dst) return alert('Provide both source and destination addresses');
   await withLogs(() => window.api.stateMove(state.cwd, src, dst));
+  // State has changed; invalidate any previous plan overlay
+  state.latestPlanJson = null;
   await refreshResources();
   if (state.selectedAddress === src) {
     state.selectedAddress = dst;
@@ -865,6 +878,8 @@ async function doStateRemove() {
   const ok = confirm(`Remove ${addr} from state? This does not destroy remote resources.`);
   if (!ok) return;
   await withLogs(() => window.api.stateRemove(state.cwd, addr));
+  // State has changed; invalidate any previous plan overlay
+  state.latestPlanJson = null;
   await refreshResources();
   if (state.selectedAddress === addr) {
     state.selectedAddress = '';
@@ -878,6 +893,8 @@ async function doImport() {
   const id = ui.importId.value.trim();
   if (!addr || !id) return alert('Provide both address and ID');
   await withLogs(() => window.api.importResource(state.cwd, addr, id));
+  // State has changed; invalidate any previous plan overlay
+  state.latestPlanJson = null;
   await refreshResources();
 }
 
@@ -893,18 +910,14 @@ function activateTab(which) {
     ui.tabInspect.classList.remove('active');
     document.querySelector('.split').style.display = 'none';
     ui.graphPanel.classList.remove('hidden');
-    // Always rebuild when opening the Graph tab to reflect latest plan/state
+    // Rebuild when opening the Graph tab to reflect latest state (and last plan if available)
     buildGraph().then(renderGraph);
   }
 }
 
 async function buildGraph() {
-  // Use terraform show -json and plan -json to build a combined graph
-  const varFiles = getSelectedVarFilesArray();
-  const [sj, pj] = await callWithSpinner(() => Promise.all([
-    window.api.showJson(state.cwd),
-    window.api.planJson(state.cwd, { varFiles }),
-  ]));
+  // Build graph from current state JSON, overlaying most recent plan JSON if available
+  const sj = await callWithSpinner(() => window.api.showJson(state.cwd));
   if (sj && sj.snapshotAt) {
     // Prefer the most recent snapshot timestamp we see
     if (!state.snapshotAt || new Date(sj.snapshotAt).getTime() > new Date(state.snapshotAt).getTime()) {
@@ -913,8 +926,7 @@ async function buildGraph() {
     }
   }
   const showJson = sj.json || null;
-  const planJson = pj.json || null;
-  const planDot = '';
+  const planJson = state.latestPlanJson || null;
 
   // Track using base addresses to align instances from plan and state
   const existing = new Set(state.resources.map(baseAddress));
