@@ -16,24 +16,39 @@
   </head>
   <body>
     <header class="app-header">
-      <div class="brand">Terraform UI</div>
-      <div class="workspace">
-        <button id="btn-open-workspace" title="Open Terraform workspace">Open</button>
-        <span id="workspace-path" class="workspace-path" title="Current workspace path">No workspace selected</span>
-        <label for="tf-workspace-select" class="muted" title="Terraform workspace">WS</label>
-        <select id="tf-workspace-select" title="Select Terraform workspace"></select>
-        <details id="tfvars-box" class="tfvars-box" title="Select *.tfvars files for commands" open>
-          <summary>Var files</summary>
-          <div id="tfvars-list" class="tfvars-list">No workspace selected</div>
-        </details>
-        <span id="snapshot-indicator" class="snapshot-indicator" title="Last pulled state snapshot">Snapshot: —</span>
-        <span id="global-spinner" class="spinner hidden" aria-label="Running..." title="Terraform command running"></span>
+      <div class="toolbar-primary">
+        <div class="brand">
+          <span class="brand-text">Terraform UI</span>
+        </div>
+        <div class="actions btn-group">
+          <button id="btn-init" class="btn" title="terraform init">Init</button>
+          <button id="btn-plan" class="btn" title="terraform plan">Plan</button>
+          <button id="btn-refresh" class="btn" title="terraform refresh">Refresh</button>
+          <button id="btn-apply" class="btn" title="terraform apply">Apply</button>
+        </div>
       </div>
-      <div class="actions">
-        <button id="btn-init">Init</button>
-        <button id="btn-plan">Plan</button>
-        <button id="btn-refresh">Refresh</button>
-        <button id="btn-apply">Apply</button>
+      <div class="toolbar-secondary">
+        <div class="workspace">
+          <button id="btn-open-workspace" class="btn btn-outline" title="Open Terraform workspace">Open</button>
+          <span id="workspace-path" class="workspace-path" title="Current workspace path">No workspace selected</span>
+          <div class="divider" role="separator" aria-hidden="true"></div>
+          <label for="tf-workspace-select" class="muted" title="Terraform workspace">Workspace</label>
+          <select id="tf-workspace-select" title="Select Terraform workspace"></select>
+          <details id="tfvars-box" class="tfvars-box" title="Select *.tfvars files for commands" open>
+            <summary>
+              <span class="summary-label">Var files</span>
+              <span id="tfvars-count" class="pill">0</span>
+              <span class="caret" aria-hidden="true">▾</span>
+            </summary>
+            <div class="tfvars-content">
+              <div id="tfvars-list" class="tfvars-list">No workspace selected</div>
+            </div>
+          </details>
+        </div>
+        <div class="status">
+          <span id="snapshot-indicator" class="snapshot-indicator" title="Last pulled state snapshot">Snapshot: —</span>
+          <span id="global-spinner" class="spinner hidden" aria-label="Running..." title="Terraform command running"></span>
+        </div>
       </div>
     </header>
 

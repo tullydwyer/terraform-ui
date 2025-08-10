@@ -216,7 +216,16 @@ function makeScopedVarId(varRef, modulePrefix) {
 
 function setWorkspace(cwd) {
   state.cwd = cwd || '';
-  ui.workspacePath.textContent = cwd || 'No workspace selected';
+  // Show only the folder name in the header, keep full path as tooltip
+  const folderName = (() => {
+    const p = String(cwd || '').trim();
+    if (!p) return '';
+    const noTrail = p.replace(/[\\\/]+$/, '');
+    const parts = noTrail.split(/[\\\/]/);
+    return parts[parts.length - 1] || noTrail;
+  })();
+  ui.workspacePath.textContent = folderName || 'No workspace selected';
+  ui.workspacePath.title = cwd || 'No workspace selected';
   // Reset selections on workspace change
   state.selectedVarFiles = new Set();
   state.terraformWorkspaces = { list: [], current: '' };
@@ -329,11 +338,13 @@ function renderTfvarsList() {
   container.innerHTML = '';
   if (!state.cwd) {
     container.textContent = 'No workspace selected';
+    updateTfvarsSummaryCount();
     return;
   }
   const items = state.availableTfvars || [];
   if (!items.length) {
     container.textContent = 'No *.tfvars found';
+    updateTfvarsSummaryCount();
     return;
   }
   items.forEach((filePath) => {
@@ -345,6 +356,7 @@ function renderTfvarsList() {
     cb.addEventListener('change', () => {
       if (cb.checked) state.selectedVarFiles.add(filePath);
       else state.selectedVarFiles.delete(filePath);
+      updateTfvarsSummaryCount();
     });
     const span = document.createElement('span');
     span.className = 'tfvar-path';
@@ -359,6 +371,7 @@ function renderTfvarsList() {
     row.appendChild(span);
     container.appendChild(row);
   });
+  updateTfvarsSummaryCount();
 }
 
 function getSelectedVarFilesArray() {
@@ -383,6 +396,20 @@ async function refreshWorkspaceMeta() {
     state.availableTfvars = [];
   }
   renderTfvarsList();
+}
+
+function updateTfvarsSummaryCount() {
+  const countEl = document.getElementById('tfvars-count');
+  if (!countEl) return;
+  const items = state.availableTfvars || [];
+  const total = items.length;
+  let selected = 0;
+  for (const filePath of state.selectedVarFiles) {
+    if (items.includes(filePath)) selected += 1;
+  }
+  countEl.textContent = String(selected);
+  const summaryEl = document.querySelector('#tfvars-box summary');
+  if (summaryEl) summaryEl.title = `${selected} of ${total} selected`;
 }
 
 async function afterWorkspaceChanged() {
