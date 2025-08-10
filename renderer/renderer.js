@@ -21,6 +21,12 @@ const ui = {
   logsPre: document.getElementById('logs-pre'),
   historySelect: document.getElementById('history-select'),
   btnClearHistory: document.getElementById('btn-clear-history'),
+  // Logs search controls
+  logsSearchBox: document.getElementById('logs-search'),
+  logsSearchInput: document.getElementById('logs-search-input'),
+  logsSearchPrev: document.getElementById('logs-search-prev'),
+  logsSearchNext: document.getElementById('logs-search-next'),
+  logsSearchClose: document.getElementById('logs-search-close'),
   // Tabs & Graph
   tabInspect: document.getElementById('tab-inspect'),
   tabGraph: document.getElementById('tab-graph'),
@@ -291,7 +297,16 @@ function appendLog({ stream, message }) {
   if (state.selectedHistoryId) return;
   const prefix = stream === 'stderr' ? '[err] ' : '';
   const html = ansiToHtml(prefix + String(message || ''));
-  ui.logsPre.insertAdjacentHTML('beforeend', html);
+  const searchActive = ui.logsSearchBox && (logFind.query || '').trim().length > 0;
+  if (searchActive) {
+    const q = logFind.query;
+    clearLogsHighlights();
+    ui.logsPre.insertAdjacentHTML('beforeend', html);
+    logFind.matches = highlightLogsMatches(q);
+    updateCurrentMatch();
+  } else {
+    ui.logsPre.insertAdjacentHTML('beforeend', html);
+  }
   // Trim logs to prevent unbounded DOM growth
   try {
     const MAX_CHARS = 2_000_000; // ~2MB of text
@@ -441,6 +456,137 @@ function clearLogs() {
   ui.logsPre.textContent = '';
 }
 
+// ---------- Logs search (Ctrl+F) ----------
+let logFind = {
+  query: '',
+  matches: [],
+  currentIndex: -1,
+};
+
+function openLogsSearch() {
+  if (!ui.logsSearchBox) return;
+  if (ui.logsSearchInput) {
+    // Keep existing query if present
+    setTimeout(() => ui.logsSearchInput.focus(), 0);
+  }
+}
+
+function closeLogsSearch() {
+  if (!ui.logsSearchBox) return;
+  // Keep the search UI visible; treat close as clear
+  if (ui.logsSearchInput) ui.logsSearchInput.value = '';
+  clearLogsHighlights();
+  logFind = { query: '', matches: [], currentIndex: -1 };
+}
+
+function clearLogsHighlights() {
+  // Replace <mark> tags with their text content
+  const container = ui.logsPre;
+  if (!container) return;
+  const marks = container.querySelectorAll('mark.hl, mark.hl-current');
+  marks.forEach((m) => {
+    const text = document.createTextNode(m.textContent || '');
+    m.parentNode.replaceChild(text, m);
+  });
+}
+
+function highlightLogsMatches(query) {
+  const container = ui.logsPre;
+  if (!container) return [];
+  clearLogsHighlights();
+  const q = String(query || '').trim();
+  if (!q) return [];
+  // Build a flat text across text nodes (ignore any existing <mark>)
+  const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT, null);
+  const textNodes = [];
+  while (walker.nextNode()) {
+    const node = walker.currentNode;
+    if (node.parentElement && node.parentElement.tagName === 'MARK') continue;
+    textNodes.push(node);
+  }
+  const parts = textNodes.map((n) => n.nodeValue || '');
+  const full = parts.join('');
+  if (!full) return [];
+  const hay = full.toLowerCase();
+  const needle = q.toLowerCase();
+  const ranges = [];
+  let pos = hay.indexOf(needle, 0);
+  while (pos !== -1) {
+    ranges.push([pos, pos + needle.length]);
+    pos = hay.indexOf(needle, pos + Math.max(1, needle.length));
+  }
+  if (!ranges.length) return [];
+  // Map absolute positions to node/offsets using cumulative lengths
+  const cumulative = [];
+  let sum = 0;
+  for (const s of parts) { sum += s.length; cumulative.push(sum); }
+  const locate = (abs) => {
+    let i = 0;
+    while (i < cumulative.length && cumulative[i] <= abs) i++;
+    const nodeIndex = Math.max(0, Math.min(i, textNodes.length - 1));
+    const before = nodeIndex === 0 ? 0 : cumulative[nodeIndex - 1];
+    return { node: textNodes[nodeIndex], offset: abs - before };
+  };
+  const created = [];
+  // Wrap from end to start to preserve earlier indices
+  for (let k = ranges.length - 1; k >= 0; k--) {
+    const [startAbs, endAbs] = ranges[k];
+    try {
+      const start = locate(startAbs);
+      const end = locate(endAbs);
+      const range = document.createRange();
+      range.setStart(start.node, start.offset);
+      range.setEnd(end.node, end.offset);
+      const mark = document.createElement('mark');
+      mark.className = 'hl';
+      range.surroundContents(mark);
+      created.unshift(mark);
+    } catch (_) {
+      // ignore
+    }
+  }
+  return created;
+}
+
+function scrollMatchIntoView(el) {
+  if (!el) return;
+  const pre = ui.logsPre;
+  const rect = el.getBoundingClientRect();
+  const preRect = pre.getBoundingClientRect();
+  if (rect.top < preRect.top + 20) {
+    pre.scrollTop += rect.top - preRect.top - 20;
+  } else if (rect.bottom > preRect.bottom - 20) {
+    pre.scrollTop += rect.bottom - preRect.bottom + 20;
+  }
+}
+
+function updateCurrentMatch(next) {
+  const { matches } = logFind;
+  if (!matches.length) return;
+  // remove old current
+  const old = ui.logsPre.querySelector('mark.hl-current');
+  if (old) old.classList.remove('hl-current');
+  if (next === 'next') logFind.currentIndex = (logFind.currentIndex + 1 + matches.length) % matches.length;
+  else if (next === 'prev') logFind.currentIndex = (logFind.currentIndex - 1 + matches.length) % matches.length;
+  else if (logFind.currentIndex < 0) logFind.currentIndex = 0;
+  const cur = matches[logFind.currentIndex];
+  if (cur) {
+    cur.classList.add('hl-current');
+    scrollMatchIntoView(cur);
+  }
+}
+
+function performLogsSearch(nextDirection) {
+  if (!ui.logsSearchInput) return;
+  const q = ui.logsSearchInput.value || '';
+  if (q.trim() !== logFind.query.trim()) {
+    logFind.query = q;
+    logFind.matches = highlightLogsMatches(q);
+    logFind.currentIndex = -1;
+  }
+  if (logFind.matches.length) updateCurrentMatch(nextDirection || 'init');
+}
+
 function renderHistoryDropdown() {
   const sel = ui.historySelect;
   if (!sel) return;
@@ -486,6 +632,12 @@ async function showHistoryItem(id) {
     state.selectedHistoryId = id;
     const text = String((res && res.text) || '');
     ui.logsPre.innerHTML = ansiToHtml(text);
+    // If search is open, re-apply highlights
+    const searchActive = ui.logsSearchBox && (logFind.query || '').trim().length > 0;
+    if (searchActive) {
+      logFind.matches = highlightLogsMatches(logFind.query);
+      updateCurrentMatch();
+    }
     ui.logsPre.scrollTop = ui.logsPre.scrollHeight;
   } catch (_) {
     state.selectedHistoryId = id;
@@ -1563,6 +1715,30 @@ function wireEvents() {
       updateLayoutSizes();
     });
   }
+
+  // Logs search: open on Ctrl+F when logs are visible
+  window.addEventListener('keydown', (ev) => {
+    const isMac = navigator.platform.toLowerCase().includes('mac');
+    const meta = isMac ? ev.metaKey : ev.ctrlKey;
+    if (meta && ev.key.toLowerCase() === 'f') {
+      ev.preventDefault();
+      openLogsSearch();
+    }
+  });
+  if (ui.logsSearchClose) ui.logsSearchClose.addEventListener('click', closeLogsSearch);
+  if (ui.logsSearchInput) {
+    ui.logsSearchInput.addEventListener('input', () => performLogsSearch());
+    ui.logsSearchInput.addEventListener('keydown', (ev) => {
+      if (ev.key === 'Enter') {
+        // Shift+Enter goes prev
+        performLogsSearch(ev.shiftKey ? 'prev' : 'next');
+      } else if (ev.key === 'Escape') {
+        closeLogsSearch();
+      }
+    });
+  }
+  if (ui.logsSearchNext) ui.logsSearchNext.addEventListener('click', () => performLogsSearch('next'));
+  if (ui.logsSearchPrev) ui.logsSearchPrev.addEventListener('click', () => performLogsSearch('prev'));
 
   // Sidebar resizer drag
   if (ui.resizerSidebar) {

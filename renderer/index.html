@@ -135,6 +135,12 @@
               <select id="history-select" title="View past command logs"></select>
               <button id="btn-clear-history" class="icon-btn" title="Clear history">Clear</button>
               <button id="btn-toggle-logs" class="icon-btn" aria-expanded="true" title="Collapse/Expand logs">▾</button>
+              <div id="logs-search" class="logs-search" title="Find in logs (Ctrl+F)">
+                <input id="logs-search-input" class="logs-search-input" placeholder="Find in logs…" />
+                <button id="logs-search-prev" class="icon-btn" title="Previous (Shift+Enter)">↑</button>
+                <button id="logs-search-next" class="icon-btn" title="Next (Enter)">↓</button>
+                <button id="logs-search-close" class="icon-btn" title="Clear (Esc)">✕</button>
+              </div>
             </div>
           </div>
           <pre id="logs-pre" class="logs-pre"></pre>

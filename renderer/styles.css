@@ -326,6 +326,19 @@ button.danger { background: #fee2e2; border-color: #fecaca; color: #991b1b; }
   padding: 6px 8px;
 }
 
+/* Logs search */
+.logs-search { display: inline-flex; align-items: center; gap: 6px; margin-left: 8px; }
+.logs-search-input {
+  background: #ffffff;
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 6px 8px;
+  width: 240px;
+}
+.logs-pre mark.hl { background: #fde68a; color: #111827; padding: 0 0px; border-radius: 2px; }
+.logs-pre mark.hl-current { background: #f59e0b; color: #111827; }
+
 .form-row { display: grid; grid-template-columns: 70px 1fr 1fr auto; gap: 8px; align-items: center; margin-bottom: 8px; }
 .form-row input {
   background: #111117;
