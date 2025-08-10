@@ -127,6 +127,14 @@ button.danger { background: #7f1d1d; border-color: #6b1616; }
 .panel-title.row { display: flex; align-items: center; justify-content: space-between; }
 .graph-controls { display: flex; gap: 6px; }
 .resources-controls { display: flex; gap: 6px; }
+.resources-search {
+  background: #111117;
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 6px 8px;
+  width: 200px;
+}
 
 .resources-list { list-style: none; padding: 0; margin: 0; }
 .resources-list li {
@@ -162,6 +170,8 @@ button.danger { background: #7f1d1d; border-color: #6b1616; }
 .resource-name { color: var(--text); }
 /* Subtext for planned action under resource id */
 .resource-change { color: var(--muted); font-size: 11px; margin-top: 2px; }
+/* Highlighted query match */
+.hl-match { background: rgba(96, 165, 250, 0.25); color: #fff; border-radius: 3px; padding: 0 2px; }
 
 /* Nested module containers */
 .resources-sublist { list-style: none; padding-left: 14px; margin: 6px 0 6px 12px; border-left: 1px dashed #2a2a33; display: block; }

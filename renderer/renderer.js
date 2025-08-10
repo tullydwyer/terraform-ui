@@ -60,6 +60,7 @@ let state = {
   // Track expanded/collapsed modules in Resources sidebar
   expandedModules: new Set(),
   knownModules: new Set(),
+  resourcesFilter: '',
 };
 
 let cy = null;
@@ -100,6 +101,30 @@ function normalizeRefToAddress(ref) {
   // Capture optional module chain followed by type.name[optional index]
   const m = s.match(/((?:module\.[^.]+\.)*[a-zA-Z0-9_]+\.[a-zA-Z0-9_]+(?:\[[^\]]+\])?)(?:\.|$)/);
   return m ? m[1] : null;
+}
+
+// -------- UI helpers: escaping and highlighting --------
+function escapeHtml(text) {
+  return String(text || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
+function escapeRegExp(s) {
+  return String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function highlightText(text) {
+  const q = (state.resourcesFilter || '').trim();
+  const safe = escapeHtml(text);
+  if (!q) return safe;
+  try {
+    const re = new RegExp(escapeRegExp(q), 'ig');
+    return safe.replace(re, (m) => `<span class="hl-match">${m}</span>`);
+  } catch (_) {
+    return safe;
+  }
 }
 
 function isGraphActive() {
@@ -502,6 +527,26 @@ function renderResources() {
   });
 
   // Render recursively
+  const matchesFilter = (text) => {
+    const q = (state.resourcesFilter || '').trim().toLowerCase();
+    if (!q) return true;
+    return String(text || '').toLowerCase().includes(q);
+  };
+
+  const moduleOrDescendantMatches = (moduleId) => {
+    const node = tree.get(moduleId);
+    if (!node) return false;
+    // Match module id itself
+    if (matchesFilter(moduleId)) return true;
+    // Any resource inside matches?
+    if (node.resources.some((r) => matchesFilter(r.base) || matchesFilter(r.addr))) return true;
+    // Any descendant module matches?
+    for (const child of node.childrenModules) {
+      if (moduleOrDescendantMatches(child)) return true;
+    }
+    return false;
+  };
+
   const renderModule = (id, container) => {
     const node = tree.get(id);
     if (!node) return;
@@ -513,6 +558,8 @@ function renderResources() {
     // If this is not root, render a module header item
     let moduleChildrenContainer = container;
     if (id) {
+      // If filter is active and this module and its descendants do not match, skip entirely
+      if (!moduleOrDescendantMatches(id)) return;
       // Aggregate change markers from descendant resources
       const aggregate = { create: 0, delete: 0, modify: 0, replace: 0 };
       const collectAgg = (mid) => {
@@ -531,10 +578,11 @@ function renderResources() {
       li.dataset.address = id;
       const expanded = state.expandedModules.has(id);
       const counts = Object.entries(aggregate).filter(([_, v]) => v > 0).map(([k, v]) => `${k[0]}${v}`).join(' ');
+      const idLabelHtml = highlightText(id);
       li.innerHTML = `
         <span class="chevron">${expanded ? '▾' : '▸'}</span>
         <div class="module-header">
-          <span class="module-id">${id}</span>
+          <span class="module-id">${idLabelHtml}</span>
           ${counts ? `<span class="module-badges">${counts}</span>` : ''}
         </div>
       `;
@@ -567,6 +615,8 @@ function renderResources() {
 
     // Render resources in this module
     resources.forEach((entry) => {
+      // Filter resources
+      if (!matchesFilter(entry.base) && !matchesFilter(entry.addr)) return;
       const li = document.createElement('li');
       li.dataset.address = entry.addr;
       const { type, name } = getTypeAndName(entry.base);
@@ -582,10 +632,12 @@ function renderResources() {
       else if (change === 'modify') changeLabel = 'will be modified';
       else if (change === 'replace') changeLabel = 'will be recreated';
       li.classList.add(`change-${change || 'none'}`);
+      const typeHtml = highlightText(type);
+      const nameHtml = highlightText(name);
       li.innerHTML = `
         <span class="marker">${marker || ''}</span>
         <div>
-          <span class="resource-id"><span class="resource-type">${type}</span>.<span class="resource-name">${name}</span></span>
+          <span class="resource-id"><span class="resource-type">${typeHtml}</span>.<span class="resource-name">${nameHtml}</span></span>
           ${changeLabel ? `<div class="resource-change">${changeLabel}</div>` : ''}
         </div>
       `;
@@ -1471,6 +1523,13 @@ async function boot() {
   if (saved) {
     setWorkspace(saved);
     await afterWorkspaceChanged();
+  }
+  // Wire resources search
+  const search = document.getElementById('resources-search');
+  if (search) {
+    const onChange = () => { state.resourcesFilter = search.value || ''; renderResources(); };
+    search.addEventListener('input', onChange);
+    search.addEventListener('change', onChange);
   }
 }
 
