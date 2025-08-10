@@ -18,7 +18,7 @@ contextBridge.exposeInMainWorld('api', {
   showJson: (cwd) => ipcRenderer.invoke('terraform:show:json', cwd),
   stateMove: (cwd, sourceAddress, destAddress) => ipcRenderer.invoke('terraform:state:mv', cwd, sourceAddress, destAddress),
   stateRemove: (cwd, address) => ipcRenderer.invoke('terraform:state:rm', cwd, address),
-  importResource: (cwd, address, id) => ipcRenderer.invoke('terraform:import', cwd, address, id),
+  importResource: (cwd, address, id, options) => ipcRenderer.invoke('terraform:import', cwd, address, id, options),
 
   // Workspaces and tfvars
   listWorkspaces: (cwd) => ipcRenderer.invoke('terraform:workspaces:list', cwd),

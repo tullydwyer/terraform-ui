@@ -417,8 +417,9 @@ ipcMain.handle('terraform:state:rm', async (_e, cwd, address) => {
   return withValidCwd('state rm', cwd, () => runTerraformStreamed(cwd, ['state', 'rm', address]));
 });
 
-ipcMain.handle('terraform:import', async (_e, cwd, address, id) => {
-  return withValidCwd('import', cwd, () => runTerraformStreamed(cwd, ['import', address, id]));
+ipcMain.handle('terraform:import', async (_e, cwd, address, id, options) => {
+  const varArgs = buildVarFileArgs(options && options.varFiles);
+  return withValidCwd('import', cwd, () => runTerraformStreamed(cwd, ['import', '-input=false', ...varArgs, address, id]));
 });
 
 ipcMain.handle('terraform:plan:json', async (_e, cwd, options) => {
