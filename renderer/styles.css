@@ -38,6 +38,11 @@ body {
   background: var(--bg);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  /* Make the app naturally fill the window without hardcoded header heights */
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
 }
 
 /* Global links and selection */
@@ -109,7 +114,11 @@ button.danger { background: #fee2e2; border-color: #fecaca; color: #991b1b; }
   --logs-height: 40%;
   display: grid;
   grid-template-columns: var(--sidebar-width) 6px 1fr;
-  height: calc(100% - 58px);
+  /* Fill remaining space under header, avoid global scrollbars */
+  flex: 1 1 auto;
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
 }
 
 .sidebar {
@@ -132,25 +141,31 @@ button.danger { background: #fee2e2; border-color: #fecaca; color: #991b1b; }
 }
 .resizer.hidden { display: none; }
 .content {
-  display: flex;
-  flex-direction: column;
+  /* Use grid so rows size exactly to the container */
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) 6px minmax(40px, var(--logs-height));
   height: 100%;
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
 }
 .tabs { display: flex; gap: 6px; padding: 10px 12px 0; }
 .tab { background: #ffffff; border: 1px solid var(--border); padding: 6px 10px; border-radius: 8px; }
 .tab.active { background: var(--primary-muted); border-color: var(--primary); box-shadow: 0 0 0 2px rgba(123,92,255,0.25) inset; }
 .split {
-  --top-pane-height: calc(100% - var(--logs-height));
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 12px;
   padding: 12px;
-  height: var(--top-pane-height);
+  /* Allow this area to shrink and scroll internally instead of forcing the page to grow */
+  min-height: 0;
 }
 .split.single {
   grid-template-columns: 1fr;
 }
 .details, .tools, .logs { background: transparent; }
+/* Make details area a column so the pre can grow and scroll */
+.details { display: flex; flex-direction: column; min-height: 0; }
 .panel { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 12px; }
 .panel + .panel { margin-top: 12px; }
 .panel-title { font-weight: 600; color: var(--muted); margin-bottom: 8px; }
@@ -218,9 +233,10 @@ button.danger { background: #fee2e2; border-color: #fecaca; color: #991b1b; }
   border: 1px solid var(--code-border);
   border-radius: 8px;
   padding: 0;
-  height: calc(100% - 28px);
   overflow: auto;
 }
+/* Let the details pre fill remaining vertical space in its pane */
+.details-pre { flex: 1 1 auto; }
 
 /* Code block typography */
 .details-pre, .logs-pre, .details-pre code, .logs-pre code {
@@ -261,8 +277,8 @@ button.danger { background: #fee2e2; border-color: #fecaca; color: #991b1b; }
 .hljs-addition { color: var(--code-addition); }
 .hljs-deletion { color: var(--code-deletion); }
 
-.logs { padding: 0 12px 12px; height: var(--logs-height); min-height: 80px; }
-.logs.collapsed { height: auto; }
+.logs { padding: 0 12px 12px; min-height: 80px; display: flex; flex-direction: column; min-width: 0; }
+.logs.collapsed { min-height: 40px; }
 .logs.collapsed .logs-pre { display: none; }
 .logs-controls { display: flex; gap: 6px; align-items: center; }
 .icon-btn { padding: 2px 8px; }
@@ -297,9 +313,10 @@ button.danger { background: #fee2e2; border-color: #fecaca; color: #991b1b; }
 .ansi-fg-bright-cyan { color: #67e8f9; }
 .ansi-fg-bright-white { color: #ffffff; }
 
-.graph-panel { height: calc(100% - var(--logs-height)); padding: 12px; }
+.graph-panel { padding: 12px; min-height: 0; }
 .graph-panel.hidden { display: none; }
-.graph-area { position: relative; width: 100%; height: calc(100% - 28px); background: #ffffff; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+.graph-panel .panel { height: 100%; display: flex; flex-direction: column; min-height: 0; }
+.graph-area { position: relative; width: 100%; flex: 1 1 auto; background: #ffffff; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
 #cy { position: absolute; inset: 0; }
 /* Removed overlay per new right-click collapse */
 /* The old DOM-based nodes are replaced by Cytoscape */

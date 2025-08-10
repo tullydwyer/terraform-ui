@@ -1424,7 +1424,7 @@ function wireEvents() {
         ui.btnToggleLogs.textContent = '▸';
         ui.btnToggleLogs.setAttribute('aria-expanded', 'false');
         logs.classList.add('collapsed');
-        state.logsHeightPct = 0; // visually collapsed
+        state.logsHeightPct = 0; // visually collapsed; value ignored while hidden
       } else {
         ui.btnToggleLogs.textContent = '▾';
         ui.btnToggleLogs.setAttribute('aria-expanded', 'true');
