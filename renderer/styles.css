@@ -126,6 +126,7 @@ button.danger { background: #7f1d1d; border-color: #6b1616; }
 .panel-title { font-weight: 600; color: var(--muted); margin-bottom: 8px; }
 .panel-title.row { display: flex; align-items: center; justify-content: space-between; }
 .graph-controls { display: flex; gap: 6px; }
+.resources-controls { display: flex; gap: 6px; }
 
 .resources-list { list-style: none; padding: 0; margin: 0; }
 .resources-list li {

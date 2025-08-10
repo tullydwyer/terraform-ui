@@ -1285,6 +1285,19 @@ function wireEvents() {
   if (collapseBtn) collapseBtn.addEventListener('click', () => { collapseExpandModules(true); applyBestLayout(); });
   if (expandBtn) expandBtn.addEventListener('click', () => { collapseExpandModules(false); applyBestLayout(); });
   if (relayoutBtn) relayoutBtn.addEventListener('click', () => applyBestLayout());
+  // Resources sidebar controls
+  const resCollapseAll = document.getElementById('btn-res-collapse-all');
+  const resExpandAll = document.getElementById('btn-res-expand-all');
+  if (resCollapseAll) resCollapseAll.addEventListener('click', () => {
+    // Collapse all known modules
+    state.knownModules.forEach((m) => state.expandedModules.delete(m));
+    renderResources();
+  });
+  if (resExpandAll) resExpandAll.addEventListener('click', () => {
+    // Expand all known modules
+    state.knownModules.forEach((m) => state.expandedModules.add(m));
+    renderResources();
+  });
   wireContextMenu();
 
   // Logs collapse

@@ -33,7 +33,13 @@
 
     <main class="layout">
       <aside class="sidebar">
-        <div class="panel-title">Resources</div>
+        <div class="panel-title row">
+          <span>Resources</span>
+          <div class="resources-controls">
+            <button id="btn-res-collapse-all" title="Collapse all modules">Collapse all</button>
+            <button id="btn-res-expand-all" title="Expand all modules">Expand all</button>
+          </div>
+        </div>
         <ul id="resources-list" class="resources-list"></ul>
       </aside>
       <div id="resizer-sidebar" class="resizer resizer-vertical" title="Drag to resize sidebar"></div>
