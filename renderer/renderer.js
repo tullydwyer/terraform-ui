@@ -10,6 +10,12 @@ const ui = {
   btnPlan: document.getElementById('btn-plan'),
   btnRefresh: document.getElementById('btn-refresh'),
   btnApply: document.getElementById('btn-apply'),
+  // Plan options
+  planOptLock: document.getElementById('plan-opt-lock'),
+  planOptRefresh: document.getElementById('plan-opt-refresh'),
+  planOptDestroy: document.getElementById('plan-opt-destroy'),
+  planOptParallelism: document.getElementById('plan-opt-parallelism'),
+  planOptTargets: document.getElementById('plan-opt-targets'),
   resourcesList: document.getElementById('resources-list'),
   resourceDetails: document.getElementById('resource-details'),
   logsPre: document.getElementById('logs-pre'),
@@ -853,7 +859,9 @@ async function loadResourceDetails(address) {
 
 async function doInit() {
   if (!(await ensureWorkspaceSelected())) return;
-  await withLogs(() => window.api.init(state.cwd));
+  // Basic init options can be extended later; keep defaults checked in UI
+  const options = {};
+  await withLogs(() => window.api.init(state.cwd, options));
   await refreshResources();
   if (isGraphActive()) renderGraph();
 }
@@ -861,8 +869,19 @@ async function doInit() {
 async function doPlan() {
   if (!(await ensureWorkspaceSelected())) return;
   const varFiles = getSelectedVarFilesArray();
+  // Gather advanced plan options
+  const lock = ui.planOptLock ? ui.planOptLock.checked : true;
+  const refresh = ui.planOptRefresh ? ui.planOptRefresh.checked : true;
+  const destroy = ui.planOptDestroy ? ui.planOptDestroy.checked : false;
+  const parallelismRaw = ui.planOptParallelism && ui.planOptParallelism.value ? Number(ui.planOptParallelism.value) : undefined;
+  const parallelism = Number.isFinite(parallelismRaw) && parallelismRaw > 0 ? parallelismRaw : undefined;
+  const targetsRaw = ui.planOptTargets && ui.planOptTargets.value ? ui.planOptTargets.value : '';
+  const targets = targetsRaw
+    .split(/\r?\n|,/) // allow newline or comma separated
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);
   // Run a single plan that also yields JSON; stream logs during execution
-  const pj = await withLogs(() => window.api.planJson(state.cwd, { varFiles }));
+  const pj = await withLogs(() => window.api.planJson(state.cwd, { varFiles, lock, refresh, destroy, parallelism, targets }));
   // Save latest plan JSON for graph overlays until state changes or another plan is run
   state.latestPlanJson = (pj && pj.json) || null;
   // Rebuild graph/resources to immediately reflect planned changes

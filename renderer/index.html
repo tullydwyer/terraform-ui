@@ -44,6 +44,37 @@
               <div id="tfvars-list" class="tfvars-list">No workspace selected</div>
             </div>
           </details>
+
+          <details id="plan-opts-box" class="tfvars-box" title="Advanced options for terraform plan">
+            <summary>
+              <span class="summary-label">Plan options</span>
+              <span class="caret" aria-hidden="true">▾</span>
+            </summary>
+            <div class="tfvars-content">
+              <div class="plan-options-grid">
+                <label class="opt-item" title="Use a state lock during operation (recommended)">
+                  <input id="plan-opt-lock" type="checkbox" checked />
+                  <span>Lock state</span>
+                </label>
+                <label class="opt-item" title="Refresh state prior to planning">
+                  <input id="plan-opt-refresh" type="checkbox" checked />
+                  <span>Refresh state</span>
+                </label>
+                <label class="opt-item" title="Create a destroy plan (plan to destroy all managed objects)">
+                  <input id="plan-opt-destroy" type="checkbox" />
+                  <span>Destroy plan</span>
+                </label>
+                <label class="opt-item" title="Limit the number of concurrent operations during planning">
+                  <span>Parallelism</span>
+                  <input id="plan-opt-parallelism" type="number" min="1" step="1" placeholder="default" class="opt-inline-number" />
+                </label>
+                <label class="opt-item opt-block" title="Limit planning to specific targets (one per line)">
+                  <span>Targets</span>
+                  <textarea id="plan-opt-targets" rows="3" placeholder="resource.address or module.name"></textarea>
+                </label>
+              </div>
+            </div>
+          </details>
         </div>
         <div class="status">
           <span id="snapshot-indicator" class="snapshot-indicator" title="Last pulled state snapshot">Snapshot: —</span>

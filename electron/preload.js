@@ -7,7 +7,7 @@ contextBridge.exposeInMainWorld('api', {
   selectWorkspace: () => ipcRenderer.invoke('workspace:select'),
 
   // Terraform operations
-  init: (cwd) => ipcRenderer.invoke('terraform:init', cwd),
+  init: (cwd, options) => ipcRenderer.invoke('terraform:init', cwd, options),
   plan: (cwd, options) => ipcRenderer.invoke('terraform:plan', cwd, options),
   planJson: (cwd, options) => ipcRenderer.invoke('terraform:plan:json', cwd, options),
   apply: (cwd, options) => ipcRenderer.invoke('terraform:apply', cwd, options),

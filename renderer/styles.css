@@ -95,6 +95,14 @@ pre, code, kbd, samp { font-family: "Roboto Mono", ui-monospace, SFMono-Regular,
 .tfvar-item { display: flex; align-items: center; gap: 8px; font-size: 12px; background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 6px 8px; }
 .tfvar-path { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pill { background: var(--surface-alt); color: var(--muted); border: 1px solid var(--border); border-radius: 999px; padding: 2px 6px; font-size: 12px; }
+
+/* Plan options */
+.plan-options-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 10px; }
+.opt-item { display: flex; align-items: center; gap: 8px; font-size: 12px; background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 6px 8px; }
+.opt-item span { color: var(--muted); }
+.opt-item.opt-block { grid-column: 1 / -1; align-items: flex-start; flex-direction: column; }
+.opt-inline-number { width: 120px; margin-left: auto; background: #ffffff; color: var(--text); border: 1px solid var(--border); border-radius: 6px; padding: 4px 6px; }
+#plan-opt-targets { width: 100%; background: #ffffff; color: var(--text); border: 1px solid var(--border); border-radius: 6px; padding: 6px 8px; font-family: "Roboto Mono", ui-monospace, monospace; }
 .snapshot-indicator {
   color: var(--muted);
   font-size: 12px;

@@ -450,13 +450,46 @@ ipcMain.handle('openExternal', async (_event, url) => {
 });
 
 // Terraform commands
-ipcMain.handle('terraform:init', async (_e, cwd) => {
-  return withValidCwd('init', cwd, () => runTerraformStreamed(cwd, ['init', '-input=false']));
+ipcMain.handle('terraform:init', async (_e, cwd, options = {}) => {
+  // Support basic init options: -upgrade, -reconfigure, -backend-config
+  const args = ['init', '-input=false'];
+  try {
+    if (options && options.upgrade === true) args.push('-upgrade');
+    if (options && options.reconfigure === true) args.push('-reconfigure');
+    if (options && Array.isArray(options.backendConfig)) {
+      for (const kv of options.backendConfig) {
+        if (!kv) continue;
+        args.push(`-backend-config=${kv}`);
+      }
+    }
+  } catch (_) {}
+  return withValidCwd('init', cwd, () => runTerraformStreamed(cwd, args));
 });
 
-ipcMain.handle('terraform:plan', async (_e, cwd, options) => {
+function buildPlanArgs(options) {
+  const args = ['plan', '-input=false'];
   const varArgs = buildVarFileArgs(options && options.varFiles);
-  return withValidCwd('plan', cwd, () => runTerraformStreamed(cwd, ['plan', '-input=false', ...varArgs]));
+  args.push(...varArgs);
+  try {
+    if (options) {
+      if (options.lock === false) args.push('-lock=false');
+      if (options.refresh === false) args.push('-refresh=false');
+      if (options.destroy === true) args.push('-destroy');
+      if (options.parallelism && Number.isFinite(Number(options.parallelism))) args.push(`-parallelism=${Number(options.parallelism)}`);
+      if (Array.isArray(options.targets)) {
+        for (const t of options.targets) {
+          if (!t) continue;
+          args.push(`-target=${t}`);
+        }
+      }
+    }
+  } catch (_) {}
+  return args;
+}
+
+ipcMain.handle('terraform:plan', async (_e, cwd, options) => {
+  const args = buildPlanArgs(options);
+  return withValidCwd('plan', cwd, () => runTerraformStreamed(cwd, args));
 });
 
 ipcMain.handle('terraform:apply', async (_e, cwd, options) => {
@@ -555,8 +588,9 @@ ipcMain.handle('terraform:plan:json', async (_e, cwd, options) => {
   return withValidCwd('plan:json', cwd, async () => {
     const tmpName = `tfplan-ui-${Date.now()}-${Math.random().toString(36).slice(2)}.bin`;
     const tmpPath = path.join(os.tmpdir(), tmpName);
-    const varArgs = buildVarFileArgs(options && options.varFiles);
-    const planRes = await runTerraformStreamed(cwd, ['plan', '-input=false', `-out=${tmpPath}`, ...varArgs]);
+    const args = buildPlanArgs(options);
+    // ensure -out is present for show -json step
+    const planRes = await runTerraformStreamed(cwd, [...args, `-out=${tmpPath}`]);
     if (planRes.code !== 0) {
       // best-effort cleanup
       try { fs.unlinkSync(tmpPath); } catch (_) { /* ignore unlink failure */ }
