@@ -13,6 +13,12 @@
     "dist:win": "electron-builder --win --publish never",
     "dist:win:x64": "electron-builder --win nsis --x64 --publish never",
     "postinstall": "",
+    "test": "node --test",
+    "quality": "npm run lint && npm test",
+    "prepack": "npm run quality",
+    "predist": "npm run quality",
+    "predist:win": "npm run quality",
+    "predist:win:x64": "npm run quality",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix"
   },

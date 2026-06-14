@@ -146,13 +146,6 @@ function highlightText(text) {
 }
 
 // -------- Fallback Terraform/HCL highlighter (minimal) --------
-function escapeHtml(text) {
-  return String(text || '')
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;');
-}
-
 function highlightTerraformFallback(raw) {
   const input = String(raw || '');
   const placeholders = [];
@@ -172,7 +165,7 @@ function highlightTerraformFallback(raw) {
   // Keywords
   s = s.replace(/\b(resource|data|variable|provider|module|locals|output)\b/g, '<span class="hljs-keyword">$1</span>');
   // Attribute keys before '=' at line start/indent
-  s = s.replace(/(^|\n)(\s*)([a-zA-Z_][\w\-]*)\s*(=)/g, (m, p1, indent, key, eq) => {
+  s = s.replace(/(^|\n)(\s*)([a-zA-Z_][\w-]*)\s*(=)/g, (m, p1, indent, key, eq) => {
     return `${p1}${indent}<span class="hljs-attr">${key}</span> ${eq}`;
   });
   // Numbers
@@ -232,8 +225,8 @@ function setWorkspace(cwd) {
   const folderName = (() => {
     const p = String(cwd || '').trim();
     if (!p) return '';
-    const noTrail = p.replace(/[\\\/]+$/, '');
-    const parts = noTrail.split(/[\\\/]/);
+    const noTrail = p.replace(/[\\/]+$/, '');
+    const parts = noTrail.split(/[\\/]/);
     return parts[parts.length - 1] || noTrail;
   })();
   ui.workspacePath.textContent = folderName || 'No workspace selected';
@@ -753,10 +746,6 @@ function renderResources() {
 
   // Build resource entries: union of existing and planned-only (with change info)
   const existingBases = new Set(state.resources.map(baseAddress));
-  const changeBy = new Map(state.graph.nodes
-    .filter((n) => (n.type || 'resource') === 'resource' && n.change)
-    .map((n) => [n.id, n.change]));
-
   const collectResourceEntry = (addr) => {
     const base = baseAddress(addr);
     const node = state.graph.nodes.find((n) => (n.type || 'resource') === 'resource' && n.id === base);
@@ -863,7 +852,7 @@ function renderResources() {
         const mnode = tree.get(mid);
         if (mnode) {
           mnode.resources.forEach((r) => {
-            if (r.change && aggregate.hasOwnProperty(r.change)) aggregate[r.change] += 1;
+            if (r.change && Object.prototype.hasOwnProperty.call(aggregate, r.change)) aggregate[r.change] += 1;
           });
           mnode.childrenModules.forEach(collectAgg);
         }
@@ -874,7 +863,7 @@ function renderResources() {
       li.className = 'module-item';
       li.dataset.address = id;
       const expanded = state.expandedModules.has(id);
-      const counts = Object.entries(aggregate).filter(([_, v]) => v > 0).map(([k, v]) => `${k[0]}${v}`).join(' ');
+      const counts = Object.entries(aggregate).filter((entry) => entry[1] > 0).map(([k, v]) => `${k[0]}${v}`).join(' ');
       const idLabelHtml = highlightText(id);
       li.innerHTML = `
         <span class="chevron">${expanded ? '▾' : '▸'}</span>
@@ -976,7 +965,8 @@ async function loadResourceDetails(address) {
   let text = (detail.stdout || detail.stderr || '').trim() || '(no details)';
   try {
     // Strip ANSI escape sequences
-    text = text.replace(/\u001b\[[0-9;]*m/g, '');
+    const ansiSgrPattern = new RegExp(`${String.fromCharCode(27)}\\[[0-9;]*m`, 'g');
+    text = text.replace(ansiSgrPattern, '');
   } catch (_) {}
   pre.innerHTML = `<code class="language-terraform"></code>`;
   const codeEl = pre.querySelector('code');
@@ -1540,7 +1530,6 @@ function showContextMenu(x, y, address) {
   // Enable/disable items contextually
   const isModule = String(address).startsWith('module.');
   const base = baseAddress(address);
-  const inState = (state.resources || []).some((r) => baseAddress(r) === base);
   const node = state.graph.nodes.find((n) => n.id === base && (n.type || 'resource') === 'resource');
   const change = (node && node.change) || '';
   // Import should be enabled only when this is a planned create and not present in state
@@ -1814,11 +1803,11 @@ function wireEvents() {
       // Rename a module call by moving every state object whose address starts with this module path
       const escapeReg = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
       const modPrefix = address; // e.g., module.a or module.a.module.b
-      const re = new RegExp(`^${escapeReg(modPrefix)}(\\[[^\\]]+\\])?\\\.`);
+      const re = new RegExp(`^${escapeReg(modPrefix)}(\\[[^\\]]+\\])?\\.`);
       const affected = (state.resources || []).filter((r) => re.test(r));
       // If nothing directly matched, also consider baseAddress on state items (defensive)
       if (affected.length === 0) {
-        const reBase = new RegExp(`^${escapeReg(base)}(\\[[^\\]]+\\])?\\\.`);
+        const reBase = new RegExp(`^${escapeReg(base)}(\\[[^\\]]+\\])?\\.`);
         affected.push(...(state.resources || []).filter((r) => reBase.test(baseAddress(r) + (r.endsWith(']') ? '' : ''))));
       }
       // Build pairs preserving instance key if present immediately after the module

@@ -4,11 +4,11 @@ Findings from the repository review, organized as a practical backlog.
 
 ## Quality Gates
 
-- [ ] Fix the current lint failure. `npm run lint` reports 8 errors and 208 warnings, mostly in `renderer/renderer.js`.
-- [ ] Remove the duplicate `escapeHtml` declaration in `renderer/renderer.js`.
-- [ ] Replace unsafe direct `hasOwnProperty` usage with `Object.prototype.hasOwnProperty.call(...)`.
-- [ ] Clean up regex lint errors and unused variables so lint can become a reliable CI gate.
-- [ ] Add a test script and run it alongside lint before packaging.
+- [x] Fix the current lint failure. `npm run lint` previously reported 8 errors and 208 warnings, mostly in `renderer/renderer.js`.
+- [x] Remove the duplicate `escapeHtml` declaration in `renderer/renderer.js`.
+- [x] Replace unsafe direct `hasOwnProperty` usage with `Object.prototype.hasOwnProperty.call(...)`.
+- [x] Clean up regex lint errors and unused variables so lint can become a reliable CI gate.
+- [x] Add a test script and run it alongside lint before packaging.
 
 ## Security
 
@@ -68,4 +68,3 @@ Findings from the repository review, organized as a practical backlog.
 - [ ] Document where command history/logs are stored.
 - [ ] Document security assumptions and Terraform CLI requirements more explicitly.
 - [ ] Fix the likely typo `example_terraform/_varaibles.tf`.
-
