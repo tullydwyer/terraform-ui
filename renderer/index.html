@@ -16,39 +16,50 @@
   </head>
   <body>
     <header class="app-header">
-      <div class="toolbar-primary">
+      <div class="toolbar-primary" aria-label="Application toolbar">
         <div class="brand">
-          <span class="brand-text">Terraform UI</span>
+          <span class="brand-mark" aria-hidden="true">TF</span>
+          <span class="brand-copy">
+            <span class="brand-text">Terraform UI</span>
+            <span class="brand-subtitle">State, plans, and dependency review</span>
+          </span>
         </div>
-        <div class="actions btn-group">
-          <button id="btn-init" class="btn" title="terraform init">Init</button>
-          <button id="btn-plan" class="btn" title="terraform plan">Plan</button>
-          <button id="btn-refresh" class="btn" title="terraform refresh">Refresh</button>
-          <button id="btn-apply" class="btn" title="terraform apply">Apply</button>
+        <div class="header-status">
+          <span id="state-storage-indicator" class="status-pill" title="Terraform state storage location">State: —</span>
+          <span id="snapshot-indicator" class="status-pill" title="Last pulled state snapshot">Snapshot: —</span>
+          <span id="global-spinner" class="spinner hidden" aria-label="Running..." title="Terraform command running"></span>
+        </div>
+        <div class="actions btn-group" aria-label="Terraform commands">
+          <button id="btn-init" class="btn btn-secondary" title="terraform init">Init</button>
+          <button id="btn-refresh" class="btn btn-secondary" title="terraform refresh">Refresh</button>
+          <button id="btn-plan" class="btn btn-primary" title="terraform plan">Plan</button>
+          <button id="btn-apply" class="btn btn-success" title="terraform apply">Apply</button>
         </div>
       </div>
       <div class="toolbar-secondary">
         <div class="workspace">
-          <button id="btn-open-workspace" class="btn btn-outline" title="Open Terraform workspace">Open</button>
-          <span id="workspace-path" class="workspace-path" title="Current workspace path">No workspace selected</span>
-          <div class="divider" role="separator" aria-hidden="true"></div>
-          <label for="tf-workspace-select" class="muted" title="Terraform workspace">Workspace</label>
-          <select id="tf-workspace-select" title="Select Terraform workspace"></select>
-          <details id="tfvars-box" class="tfvars-box" title="Select *.tfvars files for commands" open>
+          <button id="btn-open-workspace" class="btn btn-secondary" title="Open Terraform workspace">Open Workspace</button>
+          <div class="workspace-meta">
+            <span class="workspace-label">Current folder</span>
+            <span id="workspace-path" class="workspace-path" title="Current workspace path">No workspace selected</span>
+          </div>
+          <label class="field-inline" title="Terraform workspace">
+            <span>Workspace</span>
+            <select id="tf-workspace-select" title="Select Terraform workspace"></select>
+          </label>
+          <details id="tfvars-box" class="toolbar-details" title="Select *.tfvars files for commands">
             <summary>
               <span class="summary-label">Var files</span>
               <span id="tfvars-count" class="pill">0</span>
-              <span class="caret" aria-hidden="true">▾</span>
             </summary>
             <div class="tfvars-content">
               <div id="tfvars-list" class="tfvars-list">No workspace selected</div>
             </div>
           </details>
 
-          <details id="plan-opts-box" class="tfvars-box" title="Advanced options for terraform plan">
+          <details id="plan-opts-box" class="toolbar-details" title="Advanced options for terraform plan">
             <summary>
               <span class="summary-label">Plan options</span>
-              <span class="caret" aria-hidden="true">▾</span>
             </summary>
             <div class="tfvars-content">
               <div class="plan-options-grid">
@@ -76,11 +87,6 @@
             </div>
           </details>
         </div>
-        <div class="status">
-          <span id="state-storage-indicator" class="state-storage-indicator" title="Terraform state storage location">State: —</span>
-          <span id="snapshot-indicator" class="snapshot-indicator" title="Last pulled state snapshot">Snapshot: —</span>
-          <span id="global-spinner" class="spinner hidden" aria-label="Running..." title="Terraform command running"></span>
-        </div>
       </div>
     </header>
 
@@ -88,38 +94,44 @@
       <aside class="sidebar">
         <div class="panel-title row">
           <span>Resources</span>
-          <div class="resources-controls">
-            <input id="resources-search" class="resources-search" placeholder="Filter…" title="Filter modules and resources" />
-          </div>
+          <span id="resources-count" class="panel-count">0</span>
+        </div>
+        <div class="sidebar-search-row">
+          <input id="resources-search" class="resources-search" placeholder="Filter resources" title="Filter modules and resources" />
         </div>
         <div class="resources-controls">
-          <button id="btn-res-collapse-all" title="Collapse all modules">Collapse all</button>
-          <button id="btn-res-expand-all" title="Expand all modules">Expand all</button>
+          <button id="btn-res-collapse-all" class="btn btn-compact" title="Collapse all modules">Collapse all</button>
+          <button id="btn-res-expand-all" class="btn btn-compact" title="Expand all modules">Expand all</button>
         </div>
-        <ul id="resources-list" class="resources-list"></ul>
+        <ul id="resources-list" class="resources-list">
+          <li class="empty-list-item">Open a workspace to list Terraform resources</li>
+        </ul>
       </aside>
       <div id="resizer-sidebar" class="resizer resizer-vertical" title="Drag to resize sidebar"></div>
       <section class="content">
-        <div class="tabs">
-          <button id="tab-inspect" class="tab active">Inspect</button>
-          <button id="tab-review" class="tab">Plan Review</button>
-          <button id="tab-graph" class="tab">Graph</button>
+        <div class="tabs" role="tablist" aria-label="Views">
+          <button id="tab-inspect" class="tab active" role="tab">Inspect</button>
+          <button id="tab-review" class="tab" role="tab">Plan Review</button>
+          <button id="tab-graph" class="tab" role="tab">Graph</button>
         </div>
-        <div class="split single">
+        <div id="inspect-panel" class="split single">
           <div class="details">
-            <div class="panel-title">Details</div>
+            <div class="panel-title row">
+              <span>Details</span>
+              <span id="details-address" class="panel-subtitle">No resource selected</span>
+            </div>
             <pre id="resource-details" class="details-pre"><code class="language-terraform">Select a resource to view details</code></pre>
           </div>
         </div>
 
         <div id="graph-panel" class="graph-panel hidden">
-          <div class="panel" style="height:100%">
+          <div class="panel">
             <div class="panel-title row">
               <span>Dependency Graph</span>
               <div class="graph-controls">
-                <button id="btn-collapse-modules" title="Collapse all modules">Collapse all</button>
-                <button id="btn-expand-modules" title="Expand all modules">Expand all</button>
-                <button id="btn-relayout" title="Re-run layout">Re-layout</button>
+                <button id="btn-collapse-modules" class="btn btn-compact" title="Collapse all modules">Collapse all</button>
+                <button id="btn-expand-modules" class="btn btn-compact" title="Expand all modules">Expand all</button>
+                <button id="btn-relayout" class="btn btn-compact" title="Re-run layout">Re-layout</button>
               </div>
             </div>
             <div id="graph-area" class="graph-area">
@@ -143,15 +155,15 @@
         <div class="logs">
           <div class="panel-title row">
             <span>Logs</span>
-            <div class="logs-controls">
+            <div class="resources-controls">
               <select id="history-select" title="View past command logs"></select>
-              <button id="btn-clear-history" class="icon-btn" title="Clear history">Clear</button>
-              <button id="btn-toggle-logs" class="icon-btn" aria-expanded="true" title="Collapse/Expand logs">▾</button>
+              <button id="btn-clear-history" class="btn btn-compact" title="Clear history">Clear</button>
+              <button id="btn-toggle-logs" class="icon-btn" aria-expanded="true" title="Collapse/Expand logs">v</button>
               <div id="logs-search" class="logs-search" title="Find in logs (Ctrl+F)">
                 <input id="logs-search-input" class="logs-search-input" placeholder="Find in logs…" />
-                <button id="logs-search-prev" class="icon-btn" title="Previous (Shift+Enter)">↑</button>
-                <button id="logs-search-next" class="icon-btn" title="Next (Enter)">↓</button>
-                <button id="logs-search-close" class="icon-btn" title="Clear (Esc)">✕</button>
+                <button id="logs-search-prev" class="icon-btn" title="Previous (Shift+Enter)">^</button>
+                <button id="logs-search-next" class="icon-btn" title="Next (Enter)">v</button>
+                <button id="logs-search-close" class="icon-btn" title="Clear (Esc)">x</button>
               </div>
             </div>
           </div>
@@ -161,10 +173,10 @@
     </main>
 
     <div id="context-menu" class="context-menu hidden">
-      <div class="menu-item" data-action="import">Import existing (terraform import)</div>
-      <div class="menu-item" data-action="rename">Rename (state mv)</div>
+      <div class="menu-item" data-action="show">Show state</div>
+      <div class="menu-item" data-action="import">Import existing</div>
+      <div class="menu-item" data-action="rename">Rename</div>
       <div class="menu-item danger" data-action="remove">Remove from state</div>
-      <div class="menu-item" data-action="show">Show state (terraform state show)</div>
       <div class="menu-item" data-action="collapse-module">Collapse module</div>
       <div class="menu-item" data-action="expand-module">Expand module</div>
     </div>

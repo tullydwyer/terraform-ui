@@ -17,8 +17,11 @@ const ui = {
   planOptDestroy: document.getElementById('plan-opt-destroy'),
   planOptParallelism: document.getElementById('plan-opt-parallelism'),
   planOptTargets: document.getElementById('plan-opt-targets'),
+  inspectPanel: document.getElementById('inspect-panel'),
   resourcesList: document.getElementById('resources-list'),
+  resourcesCount: document.getElementById('resources-count'),
   resourceDetails: document.getElementById('resource-details'),
+  detailsAddress: document.getElementById('details-address'),
   logsPre: document.getElementById('logs-pre'),
   historySelect: document.getElementById('history-select'),
   btnClearHistory: document.getElementById('btn-clear-history'),
@@ -52,15 +55,6 @@ const ui = {
   importIdInput: document.getElementById('import-id'),
   btnImportOk: document.getElementById('btn-import-ok'),
   btnImportCancel: document.getElementById('btn-import-cancel'),
-  // (state refactor/import controls removed from Inspect tab)
-  mvSrc: document.getElementById('mv-src'),
-  mvDst: document.getElementById('mv-dst'),
-  btnStateMv: document.getElementById('btn-state-mv'),
-  rmAddr: document.getElementById('rm-addr'),
-  btnStateRm: document.getElementById('btn-state-rm'),
-  importAddr: document.getElementById('import-addr'),
-  importId: document.getElementById('import-id'),
-  btnImport: document.getElementById('btn-import'),
   btnToggleLogs: document.getElementById('btn-toggle-logs'),
 };
 
@@ -257,10 +251,13 @@ function setWorkspace(cwd) {
   state.selectedVarFiles = new Set();
   state.terraformWorkspaces = { list: [], current: '' };
   state.stateStorage = null;
+  state.selectedAddress = '';
+  ui.resourceDetails.textContent = 'Select a resource to view details';
   invalidateReviewedPlan();
   renderStateStorageIndicator();
   renderTfvarsList();
   renderWorkspaceDropdown();
+  if (ui.detailsAddress) {ui.detailsAddress.textContent = 'No resource selected';}
 }
 
 function formatRelativeTime(iso) {
@@ -627,6 +624,7 @@ function renderPlanReview() {
       const change = summary.changes[idx];
       if (!change) {return;}
       state.selectedAddress = change.address;
+      if (ui.detailsAddress) {ui.detailsAddress.textContent = change.address || 'Selected plan change';}
       ui.resourceDetails.innerHTML = `<code class="language-json">${escapeHtml(JSON.stringify(visibleRawChange(change), null, 2))}</code>`;
       activateTab('inspect');
     });
@@ -1165,6 +1163,10 @@ function renderResources() {
     .forEach((n) => {
       if (!resourceMap.has(n.id)) {resourceMap.set(n.id, { addr: n.id, base: n.id, change: n.change || (n.planned ? 'create' : '') });}
     });
+  if (ui.resourcesCount) {
+    ui.resourcesCount.textContent = String(resourceMap.size);
+    ui.resourcesCount.title = `${resourceMap.size} resource${resourceMap.size === 1 ? '' : 's'} shown`;
+  }
 
   // Build module tree structure
   const modules = new Set(state.graph.nodes.filter((n) => (n.type || 'resource') === 'module' || n.type === 'module').map((n) => n.id));
@@ -1344,6 +1346,15 @@ function renderResources() {
   };
 
   renderModule('', ui.resourcesList);
+
+  if (!ui.resourcesList.children.length) {
+    const li = document.createElement('li');
+    li.className = 'empty-list-item';
+    li.textContent = state.cwd
+      ? ((state.resourcesFilter || '').trim() ? 'No resources match the filter' : 'No resources found in this workspace')
+      : 'Open a workspace to list Terraform resources';
+    ui.resourcesList.appendChild(li);
+  }
 }
 
 async function refreshResources() {
@@ -1359,6 +1370,10 @@ async function refreshResources() {
 async function loadResourceDetails(address) {
   if (!state.cwd) {return;}
   const pre = ui.resourceDetails;
+  if (ui.detailsAddress) {
+    ui.detailsAddress.textContent = address || 'No resource selected';
+    ui.detailsAddress.title = address || '';
+  }
   pre.innerHTML = '<code class="language-terraform">Loading...</code>';
   const detail = await callWithSpinner(() => window.api.stateShow(state.cwd, address));
   if (detail && detail.snapshotAt) {
@@ -1476,64 +1491,20 @@ async function doRefresh() {
   if (isGraphActive()) {renderGraph();}
 }
 
-// destroy feature removed
-
-async function doStateMove() {
-  if (!(await ensureWorkspaceSelected())) {return;}
-  const src = ui.mvSrc.value.trim();
-  const dst = ui.mvDst.value.trim();
-  if (!src || !dst) {return alert('Provide both source and destination addresses');}
-  await withLogs(() => window.api.stateMove(state.cwd, src, dst));
-  // State has changed; invalidate any previous plan overlay
-  invalidateReviewedPlan();
-  await refreshResources();
-  if (state.selectedAddress === src) {
-    state.selectedAddress = dst;
-    await loadResourceDetails(dst);
-  }
-}
-
-async function doStateRemove() {
-  if (!(await ensureWorkspaceSelected())) {return;}
-  const addr = ui.rmAddr.value.trim();
-  if (!addr) {return alert('Provide an address to remove');}
-  const ok = confirm(`Remove ${addr} from state? This does not destroy remote resources.`);
-  if (!ok) {return;}
-  await withLogs(() => window.api.stateRemove(state.cwd, addr));
-  // State has changed; invalidate any previous plan overlay
-  invalidateReviewedPlan();
-  await refreshResources();
-  if (state.selectedAddress === addr) {
-    state.selectedAddress = '';
-    ui.resourceDetails.textContent = 'Select a resource to view details';
-  }
-}
-
-async function doImport() {
-  if (!(await ensureWorkspaceSelected())) {return;}
-  const addr = ui.importAddr.value.trim();
-  const id = ui.importId.value.trim();
-  if (!addr || !id) {return alert('Provide both address and ID');}
-  await withLogs(() => window.api.importResource(state.cwd, addr, id));
-  // State has changed; invalidate any previous plan overlay
-  invalidateReviewedPlan();
-  await refreshResources();
-}
-
 // ---------------- Graph ----------------
 function activateTab(which) {
   if (which === 'inspect') {
     ui.tabInspect.classList.add('active');
     if (ui.tabReview) {ui.tabReview.classList.remove('active');}
     ui.tabGraph.classList.remove('active');
-    document.querySelector('.split').style.display = '';
+    if (ui.inspectPanel) {ui.inspectPanel.style.display = '';}
     if (ui.planReviewPanel) {ui.planReviewPanel.classList.add('hidden');}
     ui.graphPanel.classList.add('hidden');
   } else if (which === 'review') {
     ui.tabInspect.classList.remove('active');
     if (ui.tabReview) {ui.tabReview.classList.add('active');}
     ui.tabGraph.classList.remove('active');
-    document.querySelector('.split').style.display = 'none';
+    if (ui.inspectPanel) {ui.inspectPanel.style.display = 'none';}
     if (ui.planReviewPanel) {ui.planReviewPanel.classList.remove('hidden');}
     ui.graphPanel.classList.add('hidden');
     renderPlanReview();
@@ -1541,7 +1512,7 @@ function activateTab(which) {
     ui.tabGraph.classList.add('active');
     ui.tabInspect.classList.remove('active');
     if (ui.tabReview) {ui.tabReview.classList.remove('active');}
-    document.querySelector('.split').style.display = 'none';
+    if (ui.inspectPanel) {ui.inspectPanel.style.display = 'none';}
     if (ui.planReviewPanel) {ui.planReviewPanel.classList.add('hidden');}
     ui.graphPanel.classList.remove('hidden');
     // Rebuild when opening the Graph tab to reflect latest state (and last plan if available)
@@ -2045,6 +2016,11 @@ function wireContextMenu() {
       await withLogs(() => window.api.stateRemove(state.cwd, address));
       invalidateReviewedPlan();
       await refreshResources();
+      if (state.selectedAddress === address) {
+        state.selectedAddress = '';
+        if (ui.detailsAddress) {ui.detailsAddress.textContent = 'No resource selected';}
+        ui.resourceDetails.textContent = 'Select a resource to view details';
+      }
     } else if (action === 'show') {
       const res = await callWithSpinner(() => window.api.stateShow(state.cwd, address));
       if (res && res.snapshotAt) {
@@ -2053,6 +2029,11 @@ function wireContextMenu() {
       }
       const text = (res.stdout || res.stderr || '').trim();
       if (text) {
+        state.selectedAddress = address;
+        if (ui.detailsAddress) {
+          ui.detailsAddress.textContent = address;
+          ui.detailsAddress.title = address;
+        }
         ui.resourceDetails.textContent = text;
       }
     } else if (action === 'import') {
@@ -2099,10 +2080,6 @@ function wireEvents() {
   ui.btnPlan.addEventListener('click', doPlan);
   ui.btnApply.addEventListener('click', doApply);
   ui.btnRefresh.addEventListener('click', doRefresh);
-  // destroy feature removed
-  if (ui.btnStateMv) {ui.btnStateMv.addEventListener('click', doStateMove);}
-  if (ui.btnStateRm) {ui.btnStateRm.addEventListener('click', doStateRemove);}
-  if (ui.btnImport) {ui.btnImport.addEventListener('click', doImport);}
   ui.tabInspect.addEventListener('click', () => activateTab('inspect'));
   if (ui.tabReview) {ui.tabReview.addEventListener('click', () => activateTab('review'));}
   ui.tabGraph.addEventListener('click', () => activateTab('graph'));
@@ -2139,12 +2116,12 @@ function wireEvents() {
       const logs = document.querySelector('.logs');
       const expanded = ui.btnToggleLogs.getAttribute('aria-expanded') !== 'false';
       if (expanded) {
-        ui.btnToggleLogs.textContent = '▸';
+        ui.btnToggleLogs.textContent = '>';
         ui.btnToggleLogs.setAttribute('aria-expanded', 'false');
         logs.classList.add('collapsed');
         state.logsHeightPct = 0; // visually collapsed; value ignored while hidden
       } else {
-        ui.btnToggleLogs.textContent = '▾';
+        ui.btnToggleLogs.textContent = 'v';
         ui.btnToggleLogs.setAttribute('aria-expanded', 'true');
         logs.classList.remove('collapsed');
         if (state.logsHeightPct < 15) {state.logsHeightPct = 30;}
@@ -2205,7 +2182,7 @@ function wireEvents() {
       state.logsHeightPct = Math.max(15, Math.min(pct, 80));
       const logs = document.querySelector('.logs');
       logs.classList.remove('collapsed');
-      if (ui.btnToggleLogs) { ui.btnToggleLogs.textContent = '▾'; ui.btnToggleLogs.setAttribute('aria-expanded', 'true'); }
+      if (ui.btnToggleLogs) { ui.btnToggleLogs.textContent = 'v'; ui.btnToggleLogs.setAttribute('aria-expanded', 'true'); }
       updateLayoutSizes();
       ev.preventDefault();
     };
