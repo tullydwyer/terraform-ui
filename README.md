@@ -12,7 +12,7 @@ An advanced user UI for Terraform.
 - Electron app (main + preload + renderer, no bundler required)
 
 ## Prerequisites
-- Node.js 18+
+- Node.js 22.12+
 - Terraform CLI installed and available on PATH
 
 ## Quickstart
@@ -29,8 +29,13 @@ An advanced user UI for Terraform.
 You can try the sample under `example_terraform/tfm-example`.
 
 ## Build (Windows .exe)
-- Ensure you are on Windows with Node 18+ installed.
+- Ensure you are on Windows with Node 22.12+ installed.
 - Install dependencies (`npm install`).
+- Run the quality and dependency checks:
+  ```bash
+  npm run quality
+  npm run audit
+  ```
 - Build an installer (.exe):
   ```bash
   npm run dist:win
@@ -43,6 +48,9 @@ You can try the sample under `example_terraform/tfm-example`.
 Notes:
 - The app is packaged using Electron Builder (NSIS target). The generated installer will install a desktop app that launches `electron/main.js` with the bundled renderer.
 - You still need the Terraform CLI installed on the machine where you run the app; this project does not bundle Terraform itself.
+- The development sample under `example_terraform/` is intentionally excluded from production packages because it can contain local Terraform state, provider caches, and generated output. Users should open their own Terraform workspace after installing the app.
+- Current release builds are unsigned and do not configure an auto-update provider. Before distributing installers outside local testing, add platform code-signing credentials and choose an update channel/provider.
+- `npm audit` currently reports zero vulnerabilities after the Electron and Electron Builder upgrade.
 
 Troubleshooting (Windows symlink privilege during build):
 - If the build fails with a 7-Zip error like “Cannot create symbolic link: A required privilege is not held by the client”, do one of the following:

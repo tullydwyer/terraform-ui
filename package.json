@@ -14,6 +14,7 @@
     "dist:win:x64": "electron-builder --win nsis --x64 --publish never",
     "postinstall": "",
     "test": "node --test",
+    "audit": "npm audit",
     "quality": "npm run lint && npm test",
     "prepack": "npm run quality",
     "predist": "npm run quality",
@@ -23,25 +24,23 @@
     "lint:fix": "eslint . --fix"
   },
   "engines": {
-    "node": ">=18.0.0"
+    "node": ">=22.12.0"
   },
   "devDependencies": {
-    "electron": "^30.0.0",
+    "electron": "^42.4.0",
+    "electron-builder": "^26.15.3",
     "eslint": "^8.57.0",
-    "rimraf": "^5.0.10",
-    "electron-builder": "^24.13.3"
+    "rimraf": "^5.0.10"
   },
   "build": {
     "appId": "io.terraform.ui",
     "productName": "Terraform UI",
     "directories": {
-      "output": "dist",
-      "buildResources": "build"
+      "output": "dist"
     },
     "files": [
       "electron/**/*",
       "renderer/**/*",
-      "example_terraform/**/*",
       "package.json"
     ],
     "asar": true,

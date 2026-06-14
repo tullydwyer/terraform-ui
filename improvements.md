@@ -53,12 +53,12 @@ Findings from the repository review, organized as a practical backlog.
 
 ## Dependencies And Packaging
 
-- [ ] Upgrade Electron from the current 30.x line after testing breaking changes.
-- [ ] Upgrade `electron-builder`.
-- [ ] Run `npm audit` after dependency upgrades and document any accepted residual risk.
-- [ ] Add app icon/build resources or remove stale `buildResources` config if unused.
-- [ ] Consider code signing and update strategy before distributing installers.
-- [ ] Review whether `example_terraform/**/*` should be included in production packages.
+- [x] Upgrade Electron from the current 30.x line after testing breaking changes.
+- [x] Upgrade `electron-builder`.
+- [x] Run `npm audit` after dependency upgrades and document any accepted residual risk.
+- [x] Add app icon/build resources or remove stale `buildResources` config if unused.
+- [x] Consider code signing and update strategy before distributing installers.
+- [x] Review whether `example_terraform/**/*` should be included in production packages.
 
 ## Documentation
 
