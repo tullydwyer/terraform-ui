@@ -30,7 +30,11 @@ const ui = {
   logsSearchClose: document.getElementById('logs-search-close'),
   // Tabs & Graph
   tabInspect: document.getElementById('tab-inspect'),
+  tabReview: document.getElementById('tab-review'),
   tabGraph: document.getElementById('tab-graph'),
+  planReviewPanel: document.getElementById('plan-review-panel'),
+  planReviewContent: document.getElementById('plan-review-content'),
+  planReviewStatus: document.getElementById('plan-review-status'),
   graphPanel: document.getElementById('graph-panel'),
   graphArea: document.getElementById('graph-area'),
   resizerSidebar: document.getElementById('resizer-sidebar'),
@@ -67,6 +71,8 @@ let state = {
   graph: { nodes: [], edges: [] },
   // Stores the most recent plan JSON produced by an explicit Plan action
   latestPlanJson: null,
+  reviewedPlan: null,
+  revealSensitivePlanValues: false,
   graphPositions: new Map(), // address -> {x,y}
   snapshotAt: null, // ISO string when terraform state was last pulled
   stateStorage: null,
@@ -251,6 +257,7 @@ function setWorkspace(cwd) {
   state.selectedVarFiles = new Set();
   state.terraformWorkspaces = { list: [], current: '' };
   state.stateStorage = null;
+  invalidateReviewedPlan();
   renderStateStorageIndicator();
   renderTfvarsList();
   renderWorkspaceDropdown();
@@ -286,6 +293,346 @@ function renderSnapshotIndicator() {
   } else {
     ui.snapshotIndicator.title = 'Last state pull time unavailable';
   }
+}
+
+function stableStringify(value) {
+  if (Array.isArray(value)) {
+    return `[${value.map((v) => stableStringify(v)).join(',')}]`;
+  }
+  if (value && typeof value === 'object') {
+    return `{${Object.keys(value).sort().map((k) => `${JSON.stringify(k)}:${stableStringify(value[k])}`).join(',')}}`;
+  }
+  return JSON.stringify(value);
+}
+
+function getPlanOptions() {
+  const varFiles = getSelectedVarFilesArray().slice().sort((a, b) => a.localeCompare(b));
+  const lock = ui.planOptLock ? ui.planOptLock.checked : true;
+  const refresh = ui.planOptRefresh ? ui.planOptRefresh.checked : true;
+  const destroy = ui.planOptDestroy ? ui.planOptDestroy.checked : false;
+  const parallelismRaw = ui.planOptParallelism && ui.planOptParallelism.value ? Number(ui.planOptParallelism.value) : undefined;
+  const parallelism = Number.isFinite(parallelismRaw) && parallelismRaw > 0 ? parallelismRaw : undefined;
+  const targetsRaw = ui.planOptTargets && ui.planOptTargets.value ? ui.planOptTargets.value : '';
+  const targets = targetsRaw
+    .split(/\r?\n|,/)
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0)
+    .sort((a, b) => a.localeCompare(b));
+  return { varFiles, lock, refresh, destroy, parallelism, targets };
+}
+
+function getPlanOptionsKey(options) {
+  return stableStringify(options || getPlanOptions());
+}
+
+function actionKind(actions) {
+  const list = Array.isArray(actions) ? actions : [];
+  const hasCreate = list.includes('create');
+  const hasDelete = list.includes('delete');
+  const hasUpdate = list.includes('update');
+  if (hasCreate && hasDelete) {return 'replace';}
+  if (hasUpdate) {return 'modify';}
+  if (hasCreate) {return 'create';}
+  if (hasDelete) {return 'delete';}
+  return '';
+}
+
+function actionLabel(kind) {
+  if (kind === 'create') {return 'Create';}
+  if (kind === 'delete') {return 'Delete';}
+  if (kind === 'modify') {return 'Modify';}
+  if (kind === 'replace') {return 'Replace';}
+  return 'No-op';
+}
+
+function summarizeChangedKeys(before, after, afterUnknown) {
+  const keys = new Set();
+  if (before && typeof before === 'object') {Object.keys(before).forEach((k) => keys.add(k));}
+  if (after && typeof after === 'object') {Object.keys(after).forEach((k) => keys.add(k));}
+  if (afterUnknown && typeof afterUnknown === 'object') {Object.keys(afterUnknown).forEach((k) => keys.add(k));}
+  const changed = [];
+  keys.forEach((key) => {
+    const beforeValue = before && typeof before === 'object' ? before[key] : undefined;
+    const afterValue = after && typeof after === 'object' ? after[key] : undefined;
+    const unknown = afterUnknown && typeof afterUnknown === 'object' && Object.prototype.hasOwnProperty.call(afterUnknown, key);
+    if (unknown || JSON.stringify(beforeValue) !== JSON.stringify(afterValue)) {changed.push(key);}
+  });
+  return changed.slice(0, 8);
+}
+
+function hasOwn(obj, key) {
+  return Boolean(obj && typeof obj === 'object' && Object.prototype.hasOwnProperty.call(obj, key));
+}
+
+function isObjectLike(value) {
+  return Boolean(value && typeof value === 'object');
+}
+
+function pathLabel(parent, key) {
+  if (typeof key === 'number' || /^\d+$/.test(String(key))) {
+    return `${parent || ''}[${key}]`;
+  }
+  return parent ? `${parent}.${key}` : String(key);
+}
+
+function compactPlanValue(value, options = {}) {
+  if (options.sensitive && !state.revealSensitivePlanValues) {return '(sensitive)';}
+  if (options.sensitive && typeof value === 'undefined') {return '(sensitive value unavailable)';}
+  if (options.unknown) {return '(known after apply)';}
+  if (typeof value === 'undefined') {return '(absent)';}
+  if (value === null) {return 'null';}
+  if (typeof value === 'string') {return JSON.stringify(value);}
+  if (typeof value === 'number' || typeof value === 'boolean') {return String(value);}
+  try {
+    const compact = JSON.stringify(value);
+    if (!compact) {return String(value);}
+    return compact.length > 180 ? `${compact.slice(0, 177)}...` : compact;
+  } catch (_) {
+    return String(value);
+  }
+}
+
+function markerAt(marker, key) {
+  if (!isObjectLike(marker)) {return undefined;}
+  return marker[key];
+}
+
+function collectDiffRows(before, after, unknown, beforeSensitive, afterSensitive, prefix, rows) {
+  const beforeWholeSensitive = beforeSensitive === true;
+  const afterWholeSensitive = afterSensitive === true;
+  const wholeUnknown = unknown === true;
+  if (beforeWholeSensitive || afterWholeSensitive || wholeUnknown) {
+    const changed = wholeUnknown || beforeWholeSensitive || afterWholeSensitive || JSON.stringify(before) !== JSON.stringify(after);
+    if (changed) {
+      rows.push({
+        key: prefix || '(value)',
+        before: compactPlanValue(before, { sensitive: beforeWholeSensitive }),
+        after: compactPlanValue(after, { sensitive: afterWholeSensitive, unknown: wholeUnknown }),
+        sensitive: beforeWholeSensitive || afterWholeSensitive,
+      });
+    }
+    return;
+  }
+
+  const shouldRecurse = isObjectLike(before) || isObjectLike(after) || isObjectLike(unknown) || isObjectLike(beforeSensitive) || isObjectLike(afterSensitive);
+  if (!shouldRecurse) {
+    if (JSON.stringify(before) !== JSON.stringify(after)) {
+      rows.push({
+        key: prefix || '(value)',
+        before: compactPlanValue(before),
+        after: compactPlanValue(after),
+        sensitive: false,
+      });
+    }
+    return;
+  }
+
+  const keys = new Set();
+  if (Array.isArray(before) || Array.isArray(after)) {
+    const maxLength = Math.max(Array.isArray(before) ? before.length : 0, Array.isArray(after) ? after.length : 0);
+    for (let i = 0; i < maxLength; i++) {keys.add(String(i));}
+  } else {
+    if (isObjectLike(before)) {Object.keys(before).forEach((k) => keys.add(k));}
+    if (isObjectLike(after)) {Object.keys(after).forEach((k) => keys.add(k));}
+  }
+  if (isObjectLike(unknown)) {Object.keys(unknown).forEach((k) => keys.add(k));}
+  if (isObjectLike(beforeSensitive)) {Object.keys(beforeSensitive).forEach((k) => keys.add(k));}
+  if (isObjectLike(afterSensitive)) {Object.keys(afterSensitive).forEach((k) => keys.add(k));}
+
+  keys.forEach((key) => {
+    const arrayKey = /^\d+$/.test(key) ? Number(key) : key;
+    const childBefore = hasOwn(before, arrayKey) ? before[arrayKey] : undefined;
+    const childAfter = hasOwn(after, arrayKey) ? after[arrayKey] : undefined;
+    collectDiffRows(
+      childBefore,
+      childAfter,
+      markerAt(unknown, arrayKey),
+      markerAt(beforeSensitive, arrayKey),
+      markerAt(afterSensitive, arrayKey),
+      pathLabel(prefix, arrayKey),
+      rows
+    );
+  });
+}
+
+function collectAttributeDiffs(change) {
+  const before = change && change.before && typeof change.before === 'object' ? change.before : {};
+  const after = change && change.after && typeof change.after === 'object' ? change.after : {};
+  const afterUnknown = change && change.after_unknown && typeof change.after_unknown === 'object' ? change.after_unknown : {};
+  const beforeSensitive = change && change.before_sensitive && typeof change.before_sensitive === 'object' ? change.before_sensitive : {};
+  const afterSensitive = change && change.after_sensitive && typeof change.after_sensitive === 'object' ? change.after_sensitive : {};
+  const rows = [];
+  collectDiffRows(before, after, afterUnknown, beforeSensitive, afterSensitive, '', rows);
+  return rows.slice(0, 24);
+}
+
+function redactValueByMarker(value, marker) {
+  if (marker === true) {return '(sensitive)';}
+  if (!isObjectLike(value) || !isObjectLike(marker)) {return value;}
+  if (Array.isArray(value)) {
+    return value.map((item, index) => redactValueByMarker(item, marker[index]));
+  }
+  const copy = { ...value };
+  Object.keys(marker).forEach((key) => {
+    if (hasOwn(copy, key)) {copy[key] = redactValueByMarker(copy[key], marker[key]);}
+  });
+  return copy;
+}
+
+function visibleRawChange(change) {
+  if (state.revealSensitivePlanValues) {return change.raw;}
+  const copy = JSON.parse(JSON.stringify(change.raw || {}));
+  if (copy.change && typeof copy.change === 'object') {
+    copy.change.before = redactValueByMarker(copy.change.before, copy.change.before_sensitive);
+    copy.change.after = redactValueByMarker(copy.change.after, copy.change.after_sensitive);
+  }
+  return copy;
+}
+
+function renderDiffRows(change) {
+  const rows = change.diffs || [];
+  if (!rows.length) {
+    return '<div class="review-diff-empty">No attribute-level diff available</div>';
+  }
+  return `
+    <div class="review-diff">
+      ${rows.map((row) => `
+        <div class="review-diff-row">
+          <span class="review-diff-key">${escapeHtml(row.key)}</span>
+          <code class="review-diff-value before${row.sensitive ? ' sensitive' : ''}">${escapeHtml(row.before)}</code>
+          <span class="review-diff-arrow">&rarr;</span>
+          <code class="review-diff-value after${row.sensitive ? ' sensitive' : ''}">${escapeHtml(row.after)}</code>
+        </div>
+      `).join('')}
+    </div>
+  `;
+}
+
+function summarizePlan(planJson) {
+  const counts = { create: 0, modify: 0, delete: 0, replace: 0 };
+  const changes = [];
+  const resourceChanges = planJson && Array.isArray(planJson.resource_changes) ? planJson.resource_changes : [];
+  resourceChanges.forEach((rc) => {
+    const kind = actionKind(rc.change && rc.change.actions);
+    if (!kind) {return;}
+    const diffs = collectAttributeDiffs(rc.change || {});
+    counts[kind] += 1;
+    changes.push({
+      address: rc.address || '',
+      type: rc.type || '',
+      name: rc.name || '',
+      kind,
+      actions: (rc.change && rc.change.actions) || [],
+      changedKeys: diffs.length ? diffs.map((row) => row.key).slice(0, 8) : summarizeChangedKeys(rc.change && rc.change.before, rc.change && rc.change.after, rc.change && rc.change.after_unknown),
+      diffs,
+      raw: rc,
+    });
+  });
+  return {
+    counts,
+    changes,
+    hasChanges: changes.length > 0,
+    hasDestructive: counts.delete > 0 || counts.replace > 0,
+  };
+}
+
+function invalidateReviewedPlan() {
+  state.latestPlanJson = null;
+  state.reviewedPlan = null;
+  state.revealSensitivePlanValues = false;
+  renderPlanReview();
+  updateApplyButtonState();
+}
+
+function isReviewedPlanCurrent() {
+  if (!state.reviewedPlan || !state.reviewedPlan.planPath) {return false;}
+  if (state.reviewedPlan.cwd !== state.cwd) {return false;}
+  return state.reviewedPlan.optionsKey === getPlanOptionsKey();
+}
+
+function updateApplyButtonState() {
+  if (!ui.btnApply) {return;}
+  const current = isReviewedPlanCurrent();
+  ui.btnApply.disabled = !current;
+  ui.btnApply.title = current ? 'Apply the reviewed saved plan' : 'Run Plan before applying';
+}
+
+function toggleSensitivePlanValues() {
+  if (!state.reviewedPlan) {return;}
+  if (!state.revealSensitivePlanValues) {
+    const typed = prompt('Sensitive values may include secrets. Type REVEAL to show them in this plan review.');
+    if (typed !== 'REVEAL') {return;}
+    state.revealSensitivePlanValues = true;
+  } else {
+    state.revealSensitivePlanValues = false;
+  }
+  renderPlanReview();
+}
+
+function renderPlanReview() {
+  if (!ui.planReviewContent || !ui.planReviewStatus) {return;}
+  const plan = state.reviewedPlan;
+  if (!plan) {
+    ui.planReviewStatus.textContent = 'No reviewed plan';
+    ui.planReviewContent.innerHTML = '<div class="review-empty">No reviewed plan</div>';
+    return;
+  }
+
+  const current = isReviewedPlanCurrent();
+  const summary = plan.json ? summarizePlan(plan.json) : (plan.summary || summarizePlan(null));
+  const created = plan.createdAt ? new Date(plan.createdAt).toLocaleString() : 'unknown';
+  const total = summary.changes.length;
+  const warning = !current
+    ? '<div class="review-warning">Plan context changed. Run Plan again.</div>'
+    : summary.hasDestructive
+      ? '<div class="review-warning danger">Deletes or replacements require confirmation before apply.</div>'
+      : '';
+
+  ui.planReviewStatus.textContent = current ? `Reviewed ${total} change${total === 1 ? '' : 's'}` : 'Plan stale';
+  ui.planReviewContent.innerHTML = `
+    ${warning}
+    <div class="review-meta">
+      <span title="${escapeHtml(plan.cwd)}">${escapeHtml(plan.workspaceLabel)}</span>
+      <span>${escapeHtml(created)}</span>
+      <span>${plan.options.destroy ? 'Destroy plan' : 'Standard plan'}</span>
+      <span>${plan.options.varFiles.length} var file${plan.options.varFiles.length === 1 ? '' : 's'}</span>
+      <button id="btn-toggle-sensitive-plan" class="review-sensitive-toggle ${state.revealSensitivePlanValues ? 'active' : ''}">
+        ${state.revealSensitivePlanValues ? 'Hide sensitive values' : 'Reveal sensitive values'}
+      </button>
+    </div>
+    <div class="review-counts">
+      <div class="review-count create"><strong>${summary.counts.create}</strong><span>Create</span></div>
+      <div class="review-count modify"><strong>${summary.counts.modify}</strong><span>Modify</span></div>
+      <div class="review-count delete"><strong>${summary.counts.delete}</strong><span>Delete</span></div>
+      <div class="review-count replace"><strong>${summary.counts.replace}</strong><span>Replace</span></div>
+    </div>
+    <div class="review-list">
+      ${summary.changes.length ? summary.changes.map((change, index) => `
+        <details class="review-change change-${change.kind}" title="${escapeHtml(change.address)}">
+          <summary>
+            <span class="review-kind">${actionLabel(change.kind)}</span>
+            <span class="review-address">${escapeHtml(change.address)}</span>
+            <span class="review-keys">${escapeHtml(change.changedKeys.join(', ') || change.actions.join(', '))}</span>
+          </summary>
+          ${renderDiffRows(change)}
+          <button class="review-json-btn" data-index="${index}">Inspect JSON</button>
+        </details>
+      `).join('') : '<div class="review-empty">No infrastructure changes</div>'}
+    </div>
+  `;
+
+  ui.planReviewContent.querySelectorAll('.review-json-btn').forEach((button) => {
+    button.addEventListener('click', () => {
+      const idx = Number(button.dataset.index);
+      const change = summary.changes[idx];
+      if (!change) {return;}
+      state.selectedAddress = change.address;
+      ui.resourceDetails.innerHTML = `<code class="language-json">${escapeHtml(JSON.stringify(visibleRawChange(change), null, 2))}</code>`;
+      activateTab('inspect');
+    });
+  });
+  const sensitiveToggle = document.getElementById('btn-toggle-sensitive-plan');
+  if (sensitiveToggle) {sensitiveToggle.addEventListener('click', toggleSensitivePlanValues);}
 }
 
 function renderStateStorageIndicator() {
@@ -421,6 +768,7 @@ function renderTfvarsList() {
     cb.addEventListener('change', () => {
       if (cb.checked) {state.selectedVarFiles.add(filePath);}
       else {state.selectedVarFiles.delete(filePath);}
+      invalidateReviewedPlan();
       updateTfvarsSummaryCount();
       // Persist selection for this workspace
       try { window.api.setTfvarsSelection(state.cwd, Array.from(state.selectedVarFiles)); } catch (_) {}
@@ -493,7 +841,7 @@ async function afterWorkspaceChanged() {
   await refreshWorkspaceMeta();
   await refreshResources();
   // New workspace; any previous plan context is no longer valid
-  state.latestPlanJson = null;
+  invalidateReviewedPlan();
 }
 
 
@@ -1060,6 +1408,7 @@ async function doInit() {
   // Basic init options can be extended later; keep defaults checked in UI
   const options = {};
   await withLogs(() => window.api.init(state.cwd, options));
+  invalidateReviewedPlan();
   await refreshWorkspaceMeta();
   await refreshResources();
   if (isGraphActive()) {renderGraph();}
@@ -1067,22 +1416,30 @@ async function doInit() {
 
 async function doPlan() {
   if (!(await ensureWorkspaceSelected())) {return;}
-  const varFiles = getSelectedVarFilesArray();
-  // Gather advanced plan options
-  const lock = ui.planOptLock ? ui.planOptLock.checked : true;
-  const refresh = ui.planOptRefresh ? ui.planOptRefresh.checked : true;
-  const destroy = ui.planOptDestroy ? ui.planOptDestroy.checked : false;
-  const parallelismRaw = ui.planOptParallelism && ui.planOptParallelism.value ? Number(ui.planOptParallelism.value) : undefined;
-  const parallelism = Number.isFinite(parallelismRaw) && parallelismRaw > 0 ? parallelismRaw : undefined;
-  const targetsRaw = ui.planOptTargets && ui.planOptTargets.value ? ui.planOptTargets.value : '';
-  const targets = targetsRaw
-    .split(/\r?\n|,/) // allow newline or comma separated
-    .map((s) => s.trim())
-    .filter((s) => s.length > 0);
+  const options = getPlanOptions();
+  state.revealSensitivePlanValues = false;
   // Run a single plan that also yields JSON; stream logs during execution
-  const pj = await withLogs(() => window.api.planJson(state.cwd, { varFiles, lock, refresh, destroy, parallelism, targets }));
+  const pj = await withLogs(() => window.api.planJson(state.cwd, options));
   // Save latest plan JSON for graph overlays until state changes or another plan is run
   state.latestPlanJson = (pj && pj.json) || null;
+  if (pj && pj.code === 0 && pj.json && pj.planPath) {
+    const summary = summarizePlan(pj.json);
+    const folderName = state.cwd.replace(/[\\/]+$/, '').split(/[\\/]/).pop() || state.cwd;
+    state.reviewedPlan = {
+      planPath: pj.planPath,
+      createdAt: pj.planCreatedAt || new Date().toISOString(),
+      cwd: state.cwd,
+      workspaceLabel: folderName,
+      options,
+      optionsKey: getPlanOptionsKey(options),
+      json: pj.json,
+      summary,
+    };
+  } else {
+    state.reviewedPlan = null;
+  }
+  renderPlanReview();
+  updateApplyButtonState();
   // Rebuild graph/resources to immediately reflect planned changes
   await buildGraph();
   // Update the resources panel to reflect planned changes/markers and planned-only resources
@@ -1092,10 +1449,19 @@ async function doPlan() {
 
 async function doApply() {
   if (!(await ensureWorkspaceSelected())) {return;}
-  const varFiles = getSelectedVarFilesArray();
-  await withLogs(() => window.api.apply(state.cwd, { varFiles }));
+  if (!isReviewedPlanCurrent()) {
+    alert('Run Plan again before applying.');
+    updateApplyButtonState();
+    return;
+  }
+  const summary = state.reviewedPlan.summary || summarizePlan(state.reviewedPlan.json);
+  if (summary.hasDestructive || state.reviewedPlan.options.destroy) {
+    const typed = prompt('This reviewed plan includes deletes, replacements, or destroy mode. Type APPLY to continue.');
+    if (typed !== 'APPLY') {return;}
+  }
+  await withLogs(() => window.api.applyPlan(state.cwd, state.reviewedPlan.planPath));
   // State has changed; invalidate any previous plan overlay
-  state.latestPlanJson = null;
+  invalidateReviewedPlan();
   await refreshResources();
   if (isGraphActive()) {renderGraph();}
 }
@@ -1105,7 +1471,7 @@ async function doRefresh() {
   const varFiles = getSelectedVarFilesArray();
   await withLogs(() => window.api.refresh(state.cwd, { varFiles }));
   // State has changed; invalidate any previous plan overlay
-  state.latestPlanJson = null;
+  invalidateReviewedPlan();
   await refreshResources();
   if (isGraphActive()) {renderGraph();}
 }
@@ -1119,7 +1485,7 @@ async function doStateMove() {
   if (!src || !dst) {return alert('Provide both source and destination addresses');}
   await withLogs(() => window.api.stateMove(state.cwd, src, dst));
   // State has changed; invalidate any previous plan overlay
-  state.latestPlanJson = null;
+  invalidateReviewedPlan();
   await refreshResources();
   if (state.selectedAddress === src) {
     state.selectedAddress = dst;
@@ -1135,7 +1501,7 @@ async function doStateRemove() {
   if (!ok) {return;}
   await withLogs(() => window.api.stateRemove(state.cwd, addr));
   // State has changed; invalidate any previous plan overlay
-  state.latestPlanJson = null;
+  invalidateReviewedPlan();
   await refreshResources();
   if (state.selectedAddress === addr) {
     state.selectedAddress = '';
@@ -1150,7 +1516,7 @@ async function doImport() {
   if (!addr || !id) {return alert('Provide both address and ID');}
   await withLogs(() => window.api.importResource(state.cwd, addr, id));
   // State has changed; invalidate any previous plan overlay
-  state.latestPlanJson = null;
+  invalidateReviewedPlan();
   await refreshResources();
 }
 
@@ -1158,13 +1524,25 @@ async function doImport() {
 function activateTab(which) {
   if (which === 'inspect') {
     ui.tabInspect.classList.add('active');
+    if (ui.tabReview) {ui.tabReview.classList.remove('active');}
     ui.tabGraph.classList.remove('active');
     document.querySelector('.split').style.display = '';
+    if (ui.planReviewPanel) {ui.planReviewPanel.classList.add('hidden');}
     ui.graphPanel.classList.add('hidden');
+  } else if (which === 'review') {
+    ui.tabInspect.classList.remove('active');
+    if (ui.tabReview) {ui.tabReview.classList.add('active');}
+    ui.tabGraph.classList.remove('active');
+    document.querySelector('.split').style.display = 'none';
+    if (ui.planReviewPanel) {ui.planReviewPanel.classList.remove('hidden');}
+    ui.graphPanel.classList.add('hidden');
+    renderPlanReview();
   } else {
     ui.tabGraph.classList.add('active');
     ui.tabInspect.classList.remove('active');
+    if (ui.tabReview) {ui.tabReview.classList.remove('active');}
     document.querySelector('.split').style.display = 'none';
+    if (ui.planReviewPanel) {ui.planReviewPanel.classList.add('hidden');}
     ui.graphPanel.classList.remove('hidden');
     // Rebuild when opening the Graph tab to reflect latest state (and last plan if available)
     buildGraph().then(renderGraph);
@@ -1665,6 +2043,7 @@ function wireContextMenu() {
       const ok = confirm(`Remove ${address} from state?`);
       if (!ok) {return;}
       await withLogs(() => window.api.stateRemove(state.cwd, address));
+      invalidateReviewedPlan();
       await refreshResources();
     } else if (action === 'show') {
       const res = await callWithSpinner(() => window.api.stateShow(state.cwd, address));
@@ -1711,6 +2090,7 @@ function wireEvents() {
       const name = ui.tfWorkspaceSelect.value;
       if (!state.cwd || !name) {return;}
       await withLogs(() => window.api.selectWorkspaceName(state.cwd, name));
+      invalidateReviewedPlan();
       await refreshWorkspaceMeta();
       await refreshResources();
     });
@@ -1724,7 +2104,14 @@ function wireEvents() {
   if (ui.btnStateRm) {ui.btnStateRm.addEventListener('click', doStateRemove);}
   if (ui.btnImport) {ui.btnImport.addEventListener('click', doImport);}
   ui.tabInspect.addEventListener('click', () => activateTab('inspect'));
+  if (ui.tabReview) {ui.tabReview.addEventListener('click', () => activateTab('review'));}
   ui.tabGraph.addEventListener('click', () => activateTab('graph'));
+  [ui.planOptLock, ui.planOptRefresh, ui.planOptDestroy, ui.planOptParallelism, ui.planOptTargets]
+    .filter(Boolean)
+    .forEach((el) => {
+      el.addEventListener('change', invalidateReviewedPlan);
+      el.addEventListener('input', invalidateReviewedPlan);
+    });
   const collapseBtn = document.getElementById('btn-collapse-modules');
   const expandBtn = document.getElementById('btn-expand-modules');
   const relayoutBtn = document.getElementById('btn-relayout');
@@ -1903,6 +2290,7 @@ function wireEvents() {
       }
       return last;
     });
+    invalidateReviewedPlan();
     await refreshResources();
   });
 
@@ -1924,6 +2312,7 @@ function wireEvents() {
     if (!address || !id) {return;}
     const varFiles = getSelectedVarFilesArray();
     await withLogs(() => window.api.importResource(state.cwd, address, id, { varFiles }));
+    invalidateReviewedPlan();
     await refreshResources();
   });}
   if (ui.importAddress) {ui.importAddress.addEventListener('keydown', (ev) => {
@@ -1956,6 +2345,8 @@ function wireEvents() {
 async function boot() {
   await applyBuildTitle();
   wireEvents();
+  renderPlanReview();
+  updateApplyButtonState();
   updateLayoutSizes();
   // Initial history load
   await loadHistoryList();

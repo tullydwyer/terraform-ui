@@ -15,6 +15,7 @@ const configFilePath = path.join(userDataDir, 'config.json');
 const historyDir = path.join(userDataDir, 'history');
 const historyLogsDir = path.join(historyDir, 'logs');
 const historyIndexPath = path.join(historyDir, 'index.json');
+const savedPlansDir = path.join(userDataDir, 'plans');
 const HISTORY_LIMIT = 200; // keep last N records
 const appBuildInfo = createAppBuildInfo();
 
@@ -411,6 +412,47 @@ function extractAddressesFromTfstateJson(stateObj) {
     return Array.from(new Set(addresses)).sort();
   } catch (_) {
     return [];
+  }
+}
+
+function ensurePlanStorage() {
+  try {
+    fs.mkdirSync(savedPlansDir, { recursive: true });
+  } catch (err) {
+    console.error('Failed to ensure plan storage:', err);
+  }
+}
+
+function isSafeSavedPlanPath(planPath) {
+  try {
+    if (typeof planPath !== 'string' || planPath.trim().length === 0) {return false;}
+    const resolvedPlan = path.resolve(planPath);
+    const resolvedDir = path.resolve(savedPlansDir);
+    const relative = path.relative(resolvedDir, resolvedPlan);
+    return relative && !relative.startsWith('..') && !path.isAbsolute(relative) && fs.existsSync(resolvedPlan);
+  } catch (_) {
+    return false;
+  }
+}
+
+function removeSavedPlan(planPath) {
+  if (!isSafeSavedPlanPath(planPath)) {return;}
+  try { fs.unlinkSync(planPath); } catch (_) { /* ignore cleanup failure */ }
+}
+
+function clearSavedPlansExcept(keepPath) {
+  try {
+    ensurePlanStorage();
+    const keep = keepPath ? path.resolve(keepPath) : '';
+    const entries = fs.readdirSync(savedPlansDir, { withFileTypes: true });
+    for (const entry of entries) {
+      if (!entry.isFile() || !/^tfplan-ui-.*\.bin$/.test(entry.name)) {continue;}
+      const fullPath = path.resolve(savedPlansDir, entry.name);
+      if (keep && fullPath === keep) {continue;}
+      try { fs.unlinkSync(fullPath); } catch (_) { /* ignore cleanup failure */ }
+    }
+  } catch (_) {
+    // best-effort cleanup only
   }
 }
 
@@ -871,6 +913,22 @@ ipcMain.handle('terraform:apply', async (_e, cwd, options) => {
   return withStateMutation('apply', cwd, () => runTerraformStreamed(cwd, ['apply', '-input=false', '-auto-approve', ...varArgs]));
 });
 
+ipcMain.handle('terraform:apply-plan', async (_e, cwd, planPath) => {
+  if (!isSafeSavedPlanPath(planPath)) {
+    const msg = 'Reviewed plan file is missing or invalid. Run Plan again before applying.';
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('terraform:log', { stream: 'stderr', message: msg + '\n' });
+    }
+    return { code: 1, stdout: '', stderr: msg };
+  }
+  const resolvedPlan = path.resolve(planPath);
+  const res = await withStateMutation('apply reviewed plan', cwd, () => runTerraformStreamed(cwd, ['apply', '-input=false', resolvedPlan]));
+  if (res && res.code === 0) {
+    removeSavedPlan(resolvedPlan);
+  }
+  return res;
+});
+
 ipcMain.handle('terraform:destroy', async (_e, cwd, options) => {
   const varArgs = buildVarFileArgs(options && options.varFiles);
   return withStateMutation('destroy', cwd, () => runTerraformStreamed(cwd, ['destroy', '-input=false', '-auto-approve', ...varArgs]));
@@ -960,25 +1018,30 @@ ipcMain.handle('terraform:import', async (_e, cwd, address, id, options) => {
 
 ipcMain.handle('terraform:plan:json', async (_e, cwd, options) => {
   return withValidCwd('plan:json', cwd, async () => {
-    const tmpName = `tfplan-ui-${Date.now()}-${Math.random().toString(36).slice(2)}.bin`;
-    const tmpPath = path.join(os.tmpdir(), tmpName);
+    ensurePlanStorage();
+    clearSavedPlansExcept('');
+    const planName = `tfplan-ui-${Date.now()}-${Math.random().toString(36).slice(2)}.bin`;
+    const planPath = path.join(savedPlansDir, planName);
     const args = buildPlanArgs(options);
     // ensure -out is present for show -json step
-    const planRes = await runTerraformStreamed(cwd, [...args, `-out=${tmpPath}`]);
+    const planRes = await runTerraformStreamed(cwd, [...args, `-out=${planPath}`]);
     if (planRes.code !== 0) {
       // best-effort cleanup
-      try { fs.unlinkSync(tmpPath); } catch (_) { /* ignore unlink failure */ }
-      return { ...planRes, json: null };
+      removeSavedPlan(planPath);
+      return { ...planRes, json: null, planPath: '' };
     }
-    const showRes = await runTerraformStreamed(cwd, ['show', '-json', tmpPath]);
+    const showRes = await runTerraformStreamed(cwd, ['show', '-json', planPath]);
     let json = null;
     try {
       json = JSON.parse(showRes.stdout);
     } catch (_) {
       // ignore
     }
-    try { fs.unlinkSync(tmpPath); } catch (_) { /* ignore unlink failure */ }
-    return { ...showRes, json };
+    if (showRes.code !== 0 || !json) {
+      removeSavedPlan(planPath);
+      return { ...showRes, json, planPath: '' };
+    }
+    return { ...showRes, json, planPath, planCreatedAt: new Date().toISOString() };
   });
 });
 

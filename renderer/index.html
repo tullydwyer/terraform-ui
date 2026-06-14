@@ -102,6 +102,7 @@
       <section class="content">
         <div class="tabs">
           <button id="tab-inspect" class="tab active">Inspect</button>
+          <button id="tab-review" class="tab">Plan Review</button>
           <button id="tab-graph" class="tab">Graph</button>
         </div>
         <div class="split single">
@@ -124,6 +125,16 @@
             <div id="graph-area" class="graph-area">
               <div id="cy"></div>
             </div>
+          </div>
+        </div>
+
+        <div id="plan-review-panel" class="plan-review-panel hidden">
+          <div class="panel plan-review">
+            <div class="panel-title row">
+              <span>Plan Review</span>
+              <span id="plan-review-status" class="review-status">No reviewed plan</span>
+            </div>
+            <div id="plan-review-content" class="plan-review-content"></div>
           </div>
         </div>
 
