@@ -59,7 +59,7 @@ function getLogPathForId(id) {
 
 function pruneHistoryIfNeeded() {
   try {
-    if (historyIndex.length <= HISTORY_LIMIT) return;
+    if (historyIndex.length <= HISTORY_LIMIT) {return;}
     // sort by startAt (asc) and remove oldest beyond limit
     historyIndex.sort((a, b) => new Date(a.startAt).getTime() - new Date(b.startAt).getTime());
     const toRemove = historyIndex.splice(0, historyIndex.length - HISTORY_LIMIT);
@@ -94,14 +94,14 @@ function createHistoryRecord(label, cwd) {
 function setHistoryArgs(id, args) {
   try {
     const it = historyIndex.find((x) => x.id === id);
-    if (!it) return;
+    if (!it) {return;}
     it.args = Array.isArray(args) ? args : [];
     saveHistoryIndex();
   } catch (_) {}
 }
 
 function appendHistoryLog(id, stream, message) {
-  if (!id) return;
+  if (!id) {return;}
   try {
     const prefix = stream === 'stderr' ? '[err] ' : '';
     fs.appendFileSync(getLogPathForId(id), prefix + String(message || ''), 'utf-8');
@@ -113,7 +113,7 @@ function appendHistoryLog(id, stream, message) {
 function finalizeHistoryRecord(id, exitCode) {
   try {
     const it = historyIndex.find((x) => x.id === id);
-    if (!it) return;
+    if (!it) {return;}
     it.exitCode = typeof exitCode === 'number' ? exitCode : Number(exitCode) || 0;
     it.endAt = new Date().toISOString();
     // also append exit code line to the log file for completeness
@@ -187,12 +187,12 @@ app.whenReady().then(() => {
   loadHistoryIndex();
 
   app.on('activate', function () {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow();
+    if (BrowserWindow.getAllWindows().length === 0) {createWindow();}
   });
 });
 
 app.on('window-all-closed', function () {
-  if (process.platform !== 'darwin') app.quit();
+  if (process.platform !== 'darwin') {app.quit();}
 });
 
 /**
@@ -218,11 +218,11 @@ function runTerraformStreamed(workingDirectory, args) {
       const message = data.toString();
       if (stream === 'stdout') {
         stdout += message;
-        if (stdout.length > MAX_BUFFER) stdout = stdout.slice(stdout.length - MAX_BUFFER);
+        if (stdout.length > MAX_BUFFER) {stdout = stdout.slice(stdout.length - MAX_BUFFER);}
       }
       if (stream === 'stderr') {
         stderr += message;
-        if (stderr.length > MAX_BUFFER) stderr = stderr.slice(stderr.length - MAX_BUFFER);
+        if (stderr.length > MAX_BUFFER) {stderr = stderr.slice(stderr.length - MAX_BUFFER);}
       }
       // Also append to the current history record if present
       if (currentHistoryId) {
@@ -237,7 +237,7 @@ function runTerraformStreamed(workingDirectory, args) {
     child.stderr.on('data', (d) => sendLog(d, 'stderr'));
 
     // Record the args used for this command on the history item
-    try { if (currentHistoryId) setHistoryArgs(currentHistoryId, args); } catch (_) {}
+    try { if (currentHistoryId) {setHistoryArgs(currentHistoryId, args);} } catch (_) {}
 
     child.on('error', (err) => {
       const hint = err && err.code === 'ENOENT'
@@ -273,7 +273,7 @@ function withTerraformQueue(label, cwd, fn) {
       }
       const res = await fn();
       // Finalize history with exit code
-      try { if (currentHistoryId) finalizeHistoryRecord(currentHistoryId, res && typeof res.code !== 'undefined' ? res.code : 0); } catch (_) {}
+      try { if (currentHistoryId) {finalizeHistoryRecord(currentHistoryId, res && typeof res.code !== 'undefined' ? res.code : 0);} } catch (_) {}
       return res;
     } finally {
       if (mainWindow && !mainWindow.isDestroyed()) {
@@ -289,7 +289,7 @@ function withTerraformQueue(label, cwd, fn) {
 
 function isValidDirectory(dirPath) {
   try {
-    if (typeof dirPath !== 'string' || dirPath.trim().length === 0) return false;
+    if (typeof dirPath !== 'string' || dirPath.trim().length === 0) {return false;}
     const st = fs.statSync(dirPath);
     return st.isDirectory();
   } catch (_) {
@@ -315,10 +315,10 @@ function withValidCwd(label, cwd, fn) {
  */
 function extractAddressesFromTfstateJson(stateObj) {
   try {
-    if (!stateObj || !Array.isArray(stateObj.resources)) return [];
+    if (!stateObj || !Array.isArray(stateObj.resources)) {return [];}
     const addresses = [];
     for (const res of stateObj.resources) {
-      if (!res || !res.type || !res.name) continue;
+      if (!res || !res.type || !res.name) {continue;}
       const modulePrefix = res.module ? res.module + '.' : '';
       const base = (res.mode === 'data')
         ? `data.${res.type}.${res.name}`
@@ -389,7 +389,7 @@ function parseWorkspaceList(stdout) {
     const isCurrent = line.startsWith('*');
     const name = line.replace(/^\*\s*/, '');
     workspaces.push(name);
-    if (isCurrent) current = name;
+    if (isCurrent) {current = name;}
   }
   return { workspaces, current };
 }
@@ -406,7 +406,7 @@ function findTfvarsFiles(rootDir) {
     for (const ent of entries) {
       const full = path.join(dir, ent.name);
       if (ent.isDirectory()) {
-        if (!IGNORE.has(ent.name)) stack.push(full);
+        if (!IGNORE.has(ent.name)) {stack.push(full);}
       } else if (ent.isFile()) {
         if (/\.tfvars(\.json)?$/i.test(ent.name)) {
           results.push(full);
@@ -439,7 +439,7 @@ ipcMain.handle('workspace:select', async () => {
   const result = await dialog.showOpenDialog(mainWindow, {
     properties: ['openDirectory'],
   });
-  if (result.canceled || result.filePaths.length === 0) return '';
+  if (result.canceled || result.filePaths.length === 0) {return '';}
   const selected = result.filePaths[0];
   if (isValidDirectory(selected)) {
     const cfg = readConfig();
@@ -460,11 +460,11 @@ ipcMain.handle('terraform:init', async (_e, cwd, options = {}) => {
   // Support basic init options: -upgrade, -reconfigure, -backend-config
   const args = ['init', '-input=false'];
   try {
-    if (options && options.upgrade === true) args.push('-upgrade');
-    if (options && options.reconfigure === true) args.push('-reconfigure');
+    if (options && options.upgrade === true) {args.push('-upgrade');}
+    if (options && options.reconfigure === true) {args.push('-reconfigure');}
     if (options && Array.isArray(options.backendConfig)) {
       for (const kv of options.backendConfig) {
-        if (!kv) continue;
+        if (!kv) {continue;}
         args.push(`-backend-config=${kv}`);
       }
     }
@@ -478,13 +478,13 @@ function buildPlanArgs(options) {
   args.push(...varArgs);
   try {
     if (options) {
-      if (options.lock === false) args.push('-lock=false');
-      if (options.refresh === false) args.push('-refresh=false');
-      if (options.destroy === true) args.push('-destroy');
-      if (options.parallelism && Number.isFinite(Number(options.parallelism))) args.push(`-parallelism=${Number(options.parallelism)}`);
+      if (options.lock === false) {args.push('-lock=false');}
+      if (options.refresh === false) {args.push('-refresh=false');}
+      if (options.destroy === true) {args.push('-destroy');}
+      if (options.parallelism && Number.isFinite(Number(options.parallelism))) {args.push(`-parallelism=${Number(options.parallelism)}`);}
       if (Array.isArray(options.targets)) {
         for (const t of options.targets) {
-          if (!t) continue;
+          if (!t) {continue;}
           args.push(`-target=${t}`);
         }
       }
@@ -632,7 +632,7 @@ ipcMain.handle('terraform:workspace:select', async (_e, cwd, name) => {
 // List tfvars files
 ipcMain.handle('terraform:tfvars:list', async (_e, cwd) => {
   try {
-    if (!isValidDirectory(cwd)) return { code: 1, files: [], error: 'Invalid workspace directory' };
+    if (!isValidDirectory(cwd)) {return { code: 1, files: [], error: 'Invalid workspace directory' };}
     const files = findTfvarsFiles(cwd);
     return { code: 0, files };
   } catch (err) {
@@ -656,7 +656,7 @@ ipcMain.handle('tfvars:selection:get', async (_e, cwd) => {
 ipcMain.handle('tfvars:selection:set', async (_e, cwd, files) => {
   try {
     const cfg = readConfig();
-    if (!cfg.tfvarsSelections) cfg.tfvarsSelections = {};
+    if (!cfg.tfvarsSelections) {cfg.tfvarsSelections = {};}
     const key = String(cwd || '');
     cfg.tfvarsSelections[key] = Array.isArray(files) ? files.filter(Boolean) : [];
     writeConfig(cfg);
@@ -680,7 +680,7 @@ ipcMain.handle('logs:history:list', async () => {
 ipcMain.handle('logs:history:get', async (_e, id) => {
   try {
     const item = historyIndex.find((x) => x.id === id) || null;
-    if (!item) return { item: null, text: '', error: 'Not found' };
+    if (!item) {return { item: null, text: '', error: 'Not found' };}
     let text = '';
     try { text = fs.readFileSync(getLogPathForId(id), 'utf-8'); } catch (_) { text = ''; }
     return { item, text };

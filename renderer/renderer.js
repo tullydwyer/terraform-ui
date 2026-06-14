@@ -86,9 +86,9 @@ let cyEventsBound = false;
 let inflightCount = 0;
 
 function setSpinnerVisible(visible) {
-  if (!ui.spinner) return;
-  if (visible) ui.spinner.classList.remove('hidden');
-  else ui.spinner.classList.add('hidden');
+  if (!ui.spinner) {return;}
+  if (visible) {ui.spinner.classList.remove('hidden');}
+  else {ui.spinner.classList.add('hidden');}
 }
 
 function beginBusy() {
@@ -98,7 +98,7 @@ function beginBusy() {
 
 function endBusy() {
   inflightCount = Math.max(0, inflightCount - 1);
-  if (inflightCount === 0) setSpinnerVisible(false);
+  if (inflightCount === 0) {setSpinnerVisible(false);}
 }
 
 async function callWithSpinner(fn) {
@@ -109,12 +109,12 @@ async function callWithSpinner(fn) {
 
 // -------- Helpers for graph addressing --------
 function baseAddress(address) {
-  if (!address) return '';
+  if (!address) {return '';}
   return String(address).replace(/\[[^\]]+\]/g, '');
 }
 
 function normalizeRefToAddress(ref) {
-  if (!ref) return null;
+  if (!ref) {return null;}
   const s = String(ref);
   // Capture optional module chain followed by type.name[optional index]
   const m = s.match(/((?:module\.[^.]+\.)*[a-zA-Z0-9_]+\.[a-zA-Z0-9_]+(?:\[[^\]]+\])?)(?:\.|$)/);
@@ -136,7 +136,7 @@ function escapeRegExp(s) {
 function highlightText(text) {
   const q = (state.resourcesFilter || '').trim();
   const safe = escapeHtml(text);
-  if (!q) return safe;
+  if (!q) {return safe;}
   try {
     const re = new RegExp(escapeRegExp(q), 'ig');
     return safe.replace(re, (m) => `<span class="hl-match">${m}</span>`);
@@ -214,7 +214,7 @@ function getModulePrefixFromAddress(address) {
 function makeScopedVarId(varRef, modulePrefix) {
   // varRef like 'var.name' → returns 'var.name' for root or 'module.<path>.var.name' for scoped
   const m = String(varRef).match(/^var\.(.+)$/);
-  if (!m) return null;
+  if (!m) {return null;}
   const name = m[1];
   return modulePrefix ? `${modulePrefix}.var.${name}` : `var.${name}`;
 }
@@ -224,7 +224,7 @@ function setWorkspace(cwd) {
   // Show only the folder name in the header, keep full path as tooltip
   const folderName = (() => {
     const p = String(cwd || '').trim();
-    if (!p) return '';
+    if (!p) {return '';}
     const noTrail = p.replace(/[\\/]+$/, '');
     const parts = noTrail.split(/[\\/]/);
     return parts[parts.length - 1] || noTrail;
@@ -239,23 +239,23 @@ function setWorkspace(cwd) {
 }
 
 function formatRelativeTime(iso) {
-  if (!iso) return '—';
+  if (!iso) {return '—';}
   const then = new Date(iso).getTime();
-  if (Number.isNaN(then)) return '—';
+  if (Number.isNaN(then)) {return '—';}
   const now = Date.now();
   const diffSec = Math.max(0, Math.floor((now - then) / 1000));
-  if (diffSec < 5) return 'just now';
-  if (diffSec < 60) return `${diffSec}s ago`;
+  if (diffSec < 5) {return 'just now';}
+  if (diffSec < 60) {return `${diffSec}s ago`;}
   const diffMin = Math.floor(diffSec / 60);
-  if (diffMin < 60) return `${diffMin}m ago`;
+  if (diffMin < 60) {return `${diffMin}m ago`;}
   const diffHr = Math.floor(diffMin / 60);
-  if (diffHr < 24) return `${diffHr}h ago`;
+  if (diffHr < 24) {return `${diffHr}h ago`;}
   const diffDay = Math.floor(diffHr / 24);
   return `${diffDay}d ago`;
 }
 
 function renderSnapshotIndicator() {
-  if (!ui.snapshotIndicator) return;
+  if (!ui.snapshotIndicator) {return;}
   const rel = formatRelativeTime(state.snapshotAt);
   ui.snapshotIndicator.textContent = `Snapshot: ${rel}`;
   if (state.snapshotAt) {
@@ -271,7 +271,7 @@ function renderSnapshotIndicator() {
 }
 
 async function ensureWorkspaceSelected() {
-  if (state.cwd) return true;
+  if (state.cwd) {return true;}
   await pickWorkspace();
   return Boolean(state.cwd);
 }
@@ -287,7 +287,7 @@ async function pickWorkspace() {
 
 function appendLog({ stream, message }) {
   // If viewing a historical log, ignore live appends
-  if (state.selectedHistoryId) return;
+  if (state.selectedHistoryId) {return;}
   const prefix = stream === 'stderr' ? '[err] ' : '';
   const html = ansiToHtml(prefix + String(message || ''));
   const searchActive = ui.logsSearchBox && (logFind.query || '').trim().length > 0;
@@ -317,7 +317,7 @@ function appendLog({ stream, message }) {
 }
 function renderWorkspaceDropdown() {
   const sel = ui.tfWorkspaceSelect;
-  if (!sel) return;
+  if (!sel) {return;}
   sel.innerHTML = '';
   if (!state.cwd) {
     const opt = document.createElement('option');
@@ -348,7 +348,7 @@ function renderWorkspaceDropdown() {
 
 function renderTfvarsList() {
   const container = ui.tfvarsList;
-  if (!container) return;
+  if (!container) {return;}
   container.innerHTML = '';
   if (!state.cwd) {
     container.textContent = 'No workspace selected';
@@ -368,8 +368,8 @@ function renderTfvarsList() {
     cb.type = 'checkbox';
     cb.checked = state.selectedVarFiles.has(filePath);
     cb.addEventListener('change', () => {
-      if (cb.checked) state.selectedVarFiles.add(filePath);
-      else state.selectedVarFiles.delete(filePath);
+      if (cb.checked) {state.selectedVarFiles.add(filePath);}
+      else {state.selectedVarFiles.delete(filePath);}
       updateTfvarsSummaryCount();
       // Persist selection for this workspace
       try { window.api.setTfvarsSelection(state.cwd, Array.from(state.selectedVarFiles)); } catch (_) {}
@@ -380,7 +380,7 @@ function renderTfvarsList() {
     // Show path relative to cwd for readability
     let rel = filePath;
     try {
-      if (state.cwd && filePath.startsWith(state.cwd)) rel = filePath.slice(state.cwd.length + 1);
+      if (state.cwd && filePath.startsWith(state.cwd)) {rel = filePath.slice(state.cwd.length + 1);}
     } catch (_) {}
     span.textContent = rel;
     row.appendChild(cb);
@@ -395,7 +395,7 @@ function getSelectedVarFilesArray() {
 }
 
 async function refreshWorkspaceMeta() {
-  if (!state.cwd) return;
+  if (!state.cwd) {return;}
   // Workspaces
   try {
     const res = await window.api.listWorkspaces(state.cwd);
@@ -425,16 +425,16 @@ async function refreshWorkspaceMeta() {
 
 function updateTfvarsSummaryCount() {
   const countEl = document.getElementById('tfvars-count');
-  if (!countEl) return;
+  if (!countEl) {return;}
   const items = state.availableTfvars || [];
   const total = items.length;
   let selected = 0;
   for (const filePath of state.selectedVarFiles) {
-    if (items.includes(filePath)) selected += 1;
+    if (items.includes(filePath)) {selected += 1;}
   }
   countEl.textContent = String(selected);
   const summaryEl = document.querySelector('#tfvars-box summary');
-  if (summaryEl) summaryEl.title = `${selected} of ${total} selected`;
+  if (summaryEl) {summaryEl.title = `${selected} of ${total} selected`;}
 }
 
 async function afterWorkspaceChanged() {
@@ -457,7 +457,7 @@ let logFind = {
 };
 
 function openLogsSearch() {
-  if (!ui.logsSearchBox) return;
+  if (!ui.logsSearchBox) {return;}
   if (ui.logsSearchInput) {
     // Keep existing query if present
     setTimeout(() => ui.logsSearchInput.focus(), 0);
@@ -465,9 +465,9 @@ function openLogsSearch() {
 }
 
 function closeLogsSearch() {
-  if (!ui.logsSearchBox) return;
+  if (!ui.logsSearchBox) {return;}
   // Keep the search UI visible; treat close as clear
-  if (ui.logsSearchInput) ui.logsSearchInput.value = '';
+  if (ui.logsSearchInput) {ui.logsSearchInput.value = '';}
   clearLogsHighlights();
   logFind = { query: '', matches: [], currentIndex: -1 };
 }
@@ -475,7 +475,7 @@ function closeLogsSearch() {
 function clearLogsHighlights() {
   // Replace <mark> tags with their text content
   const container = ui.logsPre;
-  if (!container) return;
+  if (!container) {return;}
   const marks = container.querySelectorAll('mark.hl, mark.hl-current');
   marks.forEach((m) => {
     const text = document.createTextNode(m.textContent || '');
@@ -485,21 +485,21 @@ function clearLogsHighlights() {
 
 function highlightLogsMatches(query) {
   const container = ui.logsPre;
-  if (!container) return [];
+  if (!container) {return [];}
   clearLogsHighlights();
   const q = String(query || '').trim();
-  if (!q) return [];
+  if (!q) {return [];}
   // Build a flat text across text nodes (ignore any existing <mark>)
   const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT, null);
   const textNodes = [];
   while (walker.nextNode()) {
     const node = walker.currentNode;
-    if (node.parentElement && node.parentElement.tagName === 'MARK') continue;
+    if (node.parentElement && node.parentElement.tagName === 'MARK') {continue;}
     textNodes.push(node);
   }
   const parts = textNodes.map((n) => n.nodeValue || '');
   const full = parts.join('');
-  if (!full) return [];
+  if (!full) {return [];}
   const hay = full.toLowerCase();
   const needle = q.toLowerCase();
   const ranges = [];
@@ -508,14 +508,14 @@ function highlightLogsMatches(query) {
     ranges.push([pos, pos + needle.length]);
     pos = hay.indexOf(needle, pos + Math.max(1, needle.length));
   }
-  if (!ranges.length) return [];
+  if (!ranges.length) {return [];}
   // Map absolute positions to node/offsets using cumulative lengths
   const cumulative = [];
   let sum = 0;
   for (const s of parts) { sum += s.length; cumulative.push(sum); }
   const locate = (abs) => {
     let i = 0;
-    while (i < cumulative.length && cumulative[i] <= abs) i++;
+    while (i < cumulative.length && cumulative[i] <= abs) {i++;}
     const nodeIndex = Math.max(0, Math.min(i, textNodes.length - 1));
     const before = nodeIndex === 0 ? 0 : cumulative[nodeIndex - 1];
     return { node: textNodes[nodeIndex], offset: abs - before };
@@ -542,7 +542,7 @@ function highlightLogsMatches(query) {
 }
 
 function scrollMatchIntoView(el) {
-  if (!el) return;
+  if (!el) {return;}
   const pre = ui.logsPre;
   const rect = el.getBoundingClientRect();
   const preRect = pre.getBoundingClientRect();
@@ -555,13 +555,13 @@ function scrollMatchIntoView(el) {
 
 function updateCurrentMatch(next) {
   const { matches } = logFind;
-  if (!matches.length) return;
+  if (!matches.length) {return;}
   // remove old current
   const old = ui.logsPre.querySelector('mark.hl-current');
-  if (old) old.classList.remove('hl-current');
-  if (next === 'next') logFind.currentIndex = (logFind.currentIndex + 1 + matches.length) % matches.length;
-  else if (next === 'prev') logFind.currentIndex = (logFind.currentIndex - 1 + matches.length) % matches.length;
-  else if (logFind.currentIndex < 0) logFind.currentIndex = 0;
+  if (old) {old.classList.remove('hl-current');}
+  if (next === 'next') {logFind.currentIndex = (logFind.currentIndex + 1 + matches.length) % matches.length;}
+  else if (next === 'prev') {logFind.currentIndex = (logFind.currentIndex - 1 + matches.length) % matches.length;}
+  else if (logFind.currentIndex < 0) {logFind.currentIndex = 0;}
   const cur = matches[logFind.currentIndex];
   if (cur) {
     cur.classList.add('hl-current');
@@ -570,19 +570,19 @@ function updateCurrentMatch(next) {
 }
 
 function performLogsSearch(nextDirection) {
-  if (!ui.logsSearchInput) return;
+  if (!ui.logsSearchInput) {return;}
   const q = ui.logsSearchInput.value || '';
   if (q.trim() !== logFind.query.trim()) {
     logFind.query = q;
     logFind.matches = highlightLogsMatches(q);
     logFind.currentIndex = -1;
   }
-  if (logFind.matches.length) updateCurrentMatch(nextDirection || 'init');
+  if (logFind.matches.length) {updateCurrentMatch(nextDirection || 'init');}
 }
 
 function renderHistoryDropdown() {
   const sel = ui.historySelect;
-  if (!sel) return;
+  if (!sel) {return;}
   sel.innerHTML = '';
   // Live option
   const optLive = document.createElement('option');
@@ -640,7 +640,7 @@ async function showHistoryItem(id) {
 
 // Basic ANSI SGR to HTML converter for logs
 function ansiToHtml(text) {
-  if (!text) return '';
+  if (!text) {return '';}
   const escape = (s) => s
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
@@ -682,7 +682,7 @@ function ansiToHtml(text) {
       segments.push(escape(text.slice(i)));
       break;
     }
-    if (escIdx > i) segments.push(escape(text.slice(i, escIdx)));
+    if (escIdx > i) {segments.push(escape(text.slice(i, escIdx)));}
     const mIdx = text.indexOf('m', escIdx + 2);
     if (mIdx === -1) {
       segments.push(escape(text.slice(escIdx)));
@@ -691,10 +691,10 @@ function ansiToHtml(text) {
     const seq = text.slice(escIdx + 2, mIdx);
     const codes = seq.split(';').filter((s) => s.length > 0);
     if (codes.includes('0')) {
-      while (closeStack.length) segments.push(closeStack.pop());
+      while (closeStack.length) {segments.push(closeStack.pop());}
     }
     for (const c of codes) {
-      if (c === '0') continue;
+      if (c === '0') {continue;}
       const cls = classesForCode(c);
       if (cls.length) {
         segments.push(`<span class="${cls.join(' ')}">`);
@@ -703,24 +703,24 @@ function ansiToHtml(text) {
     }
     i = mIdx + 1;
   }
-  while (closeStack.length) segments.push(closeStack.pop());
+  while (closeStack.length) {segments.push(closeStack.pop());}
   return segments.join('');
 }
 
 async function withLogs(task) {
   // If viewing history, don't wipe the shown logs; otherwise clear for fresh live session
-  if (!state.selectedHistoryId) clearLogs();
+  if (!state.selectedHistoryId) {clearLogs();}
   const unsubscribe = window.api.onLog(appendLog);
   beginBusy();
   try {
     const result = await task();
     if (result && typeof result.code !== 'undefined') {
       const html = ansiToHtml(`\n[exit code ${result.code}]\n`);
-      if (!state.selectedHistoryId) ui.logsPre.insertAdjacentHTML('beforeend', html);
+      if (!state.selectedHistoryId) {ui.logsPre.insertAdjacentHTML('beforeend', html);}
     }
     return result;
   } finally {
-    if (typeof unsubscribe === 'function') unsubscribe();
+    if (typeof unsubscribe === 'function') {unsubscribe();}
     endBusy();
   }
 }
@@ -734,7 +734,7 @@ function renderResources() {
     if (s.startsWith('module.')) {
       const parts = s.split('.');
       let i = 0;
-      while (i < parts.length && parts[i] === 'module' && i + 1 < parts.length) i += 2;
+      while (i < parts.length && parts[i] === 'module' && i + 1 < parts.length) {i += 2;}
       s = parts.slice(i).join('.');
     }
     const p = s.split('.');
@@ -757,13 +757,13 @@ function renderResources() {
   // Existing state resources (include instances as-is)
   state.resources.forEach((addr) => {
     const base = baseAddress(addr);
-    if (!resourceMap.has(base)) resourceMap.set(base, collectResourceEntry(addr));
+    if (!resourceMap.has(base)) {resourceMap.set(base, collectResourceEntry(addr));}
   });
   // Planned-only resources (that are not present in state)
   state.graph.nodes
     .filter((n) => (n.type || 'resource') === 'resource' && !existingBases.has(n.id))
     .forEach((n) => {
-      if (!resourceMap.has(n.id)) resourceMap.set(n.id, { addr: n.id, base: n.id, change: n.change || (n.planned ? 'create' : '') });
+      if (!resourceMap.has(n.id)) {resourceMap.set(n.id, { addr: n.id, base: n.id, change: n.change || (n.planned ? 'create' : '') });}
     });
 
   // Build module tree structure
@@ -773,14 +773,14 @@ function renderResources() {
     const parts = mid.split('.');
     for (let i = 2; i < parts.length; i += 2) {
       const parent = parts.slice(0, i).join('.');
-      if (parent.startsWith('module.') && !modules.has(parent)) modules.add(parent);
+      if (parent.startsWith('module.') && !modules.has(parent)) {modules.add(parent);}
     }
   });
 
   const tree = new Map(); // id -> { id, childrenModules:Set, resources:[] }
   const ensureModuleNode = (id) => {
     const key = id || '';
-    if (!tree.has(key)) tree.set(key, { id: key, childrenModules: new Set(), resources: [] });
+    if (!tree.has(key)) {tree.set(key, { id: key, childrenModules: new Set(), resources: [] });}
     return tree.get(key);
   };
   // Root container
@@ -805,7 +805,7 @@ function renderResources() {
 
   // Initialize expansion defaults for modules never seen before
   tree.forEach((node, id) => {
-    if (!id) return; // skip root
+    if (!id) {return;} // skip root
     if (!state.knownModules.has(id)) {
       state.knownModules.add(id);
       state.expandedModules.add(id); // default expanded on first discovery
@@ -815,27 +815,27 @@ function renderResources() {
   // Render recursively
   const matchesFilter = (text) => {
     const q = (state.resourcesFilter || '').trim().toLowerCase();
-    if (!q) return true;
+    if (!q) {return true;}
     return String(text || '').toLowerCase().includes(q);
   };
 
   const moduleOrDescendantMatches = (moduleId) => {
     const node = tree.get(moduleId);
-    if (!node) return false;
+    if (!node) {return false;}
     // Match module id itself
-    if (matchesFilter(moduleId)) return true;
+    if (matchesFilter(moduleId)) {return true;}
     // Any resource inside matches?
-    if (node.resources.some((r) => matchesFilter(r.base) || matchesFilter(r.addr))) return true;
+    if (node.resources.some((r) => matchesFilter(r.base) || matchesFilter(r.addr))) {return true;}
     // Any descendant module matches?
     for (const child of node.childrenModules) {
-      if (moduleOrDescendantMatches(child)) return true;
+      if (moduleOrDescendantMatches(child)) {return true;}
     }
     return false;
   };
 
   const renderModule = (id, container) => {
     const node = tree.get(id);
-    if (!node) return;
+    if (!node) {return;}
 
     // Sort children modules by id for stability
     const childrenMods = Array.from(node.childrenModules).sort((a, b) => a.localeCompare(b));
@@ -845,14 +845,14 @@ function renderResources() {
     let moduleChildrenContainer = container;
     if (id) {
       // If filter is active and this module and its descendants do not match, skip entirely
-      if (!moduleOrDescendantMatches(id)) return;
+      if (!moduleOrDescendantMatches(id)) {return;}
       // Aggregate change markers from descendant resources
       const aggregate = { create: 0, delete: 0, modify: 0, replace: 0 };
       const collectAgg = (mid) => {
         const mnode = tree.get(mid);
         if (mnode) {
           mnode.resources.forEach((r) => {
-            if (r.change && Object.prototype.hasOwnProperty.call(aggregate, r.change)) aggregate[r.change] += 1;
+            if (r.change && Object.prototype.hasOwnProperty.call(aggregate, r.change)) {aggregate[r.change] += 1;}
           });
           mnode.childrenModules.forEach(collectAgg);
         }
@@ -874,10 +874,10 @@ function renderResources() {
       `;
       li.addEventListener('mousedown', (e) => {
         // Left-click toggles; prevent text selection quirks
-        if (e.button !== 0) return;
+        if (e.button !== 0) {return;}
         e.preventDefault();
-        if (state.expandedModules.has(id)) state.expandedModules.delete(id);
-        else state.expandedModules.add(id);
+        if (state.expandedModules.has(id)) {state.expandedModules.delete(id);}
+        else {state.expandedModules.add(id);}
         renderResources();
       });
       li.addEventListener('contextmenu', (e) => {
@@ -902,21 +902,21 @@ function renderResources() {
     // Render resources in this module
     resources.forEach((entry) => {
       // Filter resources
-      if (!matchesFilter(entry.base) && !matchesFilter(entry.addr)) return;
+      if (!matchesFilter(entry.base) && !matchesFilter(entry.addr)) {return;}
       const li = document.createElement('li');
       li.dataset.address = entry.addr;
       const { type, name } = getTypeAndName(entry.base);
       const change = entry.change || '';
       let marker = '';
-      if (change === 'create') marker = '+';
-      else if (change === 'delete') marker = '-';
-      else if (change === 'modify') marker = '~';
-      else if (change === 'replace') marker = '-/+';
+      if (change === 'create') {marker = '+';}
+      else if (change === 'delete') {marker = '-';}
+      else if (change === 'modify') {marker = '~';}
+      else if (change === 'replace') {marker = '-/+';}
       let changeLabel = '';
-      if (change === 'create') changeLabel = 'will be created';
-      else if (change === 'delete') changeLabel = 'will be deleted';
-      else if (change === 'modify') changeLabel = 'will be modified';
-      else if (change === 'replace') changeLabel = 'will be recreated';
+      if (change === 'create') {changeLabel = 'will be created';}
+      else if (change === 'delete') {changeLabel = 'will be deleted';}
+      else if (change === 'modify') {changeLabel = 'will be modified';}
+      else if (change === 'replace') {changeLabel = 'will be recreated';}
       li.classList.add(`change-${change || 'none'}`);
       const typeHtml = highlightText(type);
       const nameHtml = highlightText(name);
@@ -947,17 +947,17 @@ function renderResources() {
 }
 
 async function refreshResources() {
-  if (!state.cwd) return;
+  if (!state.cwd) {return;}
   const res = await callWithSpinner(() => window.api.stateList(state.cwd));
   state.resources = res.resources || [];
-  if (res && res.snapshotAt) state.snapshotAt = res.snapshotAt;
+  if (res && res.snapshotAt) {state.snapshotAt = res.snapshotAt;}
   renderSnapshotIndicator();
   await buildGraph();
   renderResources();
 }
 
 async function loadResourceDetails(address) {
-  if (!state.cwd) return;
+  if (!state.cwd) {return;}
   const pre = ui.resourceDetails;
   pre.innerHTML = '<code class="language-terraform">Loading...</code>';
   const detail = await callWithSpinner(() => window.api.stateShow(state.cwd, address));
@@ -1000,16 +1000,16 @@ async function loadResourceDetails(address) {
 }
 
 async function doInit() {
-  if (!(await ensureWorkspaceSelected())) return;
+  if (!(await ensureWorkspaceSelected())) {return;}
   // Basic init options can be extended later; keep defaults checked in UI
   const options = {};
   await withLogs(() => window.api.init(state.cwd, options));
   await refreshResources();
-  if (isGraphActive()) renderGraph();
+  if (isGraphActive()) {renderGraph();}
 }
 
 async function doPlan() {
-  if (!(await ensureWorkspaceSelected())) return;
+  if (!(await ensureWorkspaceSelected())) {return;}
   const varFiles = getSelectedVarFilesArray();
   // Gather advanced plan options
   const lock = ui.planOptLock ? ui.planOptLock.checked : true;
@@ -1030,36 +1030,36 @@ async function doPlan() {
   await buildGraph();
   // Update the resources panel to reflect planned changes/markers and planned-only resources
   renderResources();
-  if (isGraphActive()) renderGraph();
+  if (isGraphActive()) {renderGraph();}
 }
 
 async function doApply() {
-  if (!(await ensureWorkspaceSelected())) return;
+  if (!(await ensureWorkspaceSelected())) {return;}
   const varFiles = getSelectedVarFilesArray();
   await withLogs(() => window.api.apply(state.cwd, { varFiles }));
   // State has changed; invalidate any previous plan overlay
   state.latestPlanJson = null;
   await refreshResources();
-  if (isGraphActive()) renderGraph();
+  if (isGraphActive()) {renderGraph();}
 }
 
 async function doRefresh() {
-  if (!(await ensureWorkspaceSelected())) return;
+  if (!(await ensureWorkspaceSelected())) {return;}
   const varFiles = getSelectedVarFilesArray();
   await withLogs(() => window.api.refresh(state.cwd, { varFiles }));
   // State has changed; invalidate any previous plan overlay
   state.latestPlanJson = null;
   await refreshResources();
-  if (isGraphActive()) renderGraph();
+  if (isGraphActive()) {renderGraph();}
 }
 
 // destroy feature removed
 
 async function doStateMove() {
-  if (!(await ensureWorkspaceSelected())) return;
+  if (!(await ensureWorkspaceSelected())) {return;}
   const src = ui.mvSrc.value.trim();
   const dst = ui.mvDst.value.trim();
-  if (!src || !dst) return alert('Provide both source and destination addresses');
+  if (!src || !dst) {return alert('Provide both source and destination addresses');}
   await withLogs(() => window.api.stateMove(state.cwd, src, dst));
   // State has changed; invalidate any previous plan overlay
   state.latestPlanJson = null;
@@ -1071,11 +1071,11 @@ async function doStateMove() {
 }
 
 async function doStateRemove() {
-  if (!(await ensureWorkspaceSelected())) return;
+  if (!(await ensureWorkspaceSelected())) {return;}
   const addr = ui.rmAddr.value.trim();
-  if (!addr) return alert('Provide an address to remove');
+  if (!addr) {return alert('Provide an address to remove');}
   const ok = confirm(`Remove ${addr} from state? This does not destroy remote resources.`);
-  if (!ok) return;
+  if (!ok) {return;}
   await withLogs(() => window.api.stateRemove(state.cwd, addr));
   // State has changed; invalidate any previous plan overlay
   state.latestPlanJson = null;
@@ -1087,10 +1087,10 @@ async function doStateRemove() {
 }
 
 async function doImport() {
-  if (!(await ensureWorkspaceSelected())) return;
+  if (!(await ensureWorkspaceSelected())) {return;}
   const addr = ui.importAddr.value.trim();
   const id = ui.importId.value.trim();
-  if (!addr || !id) return alert('Provide both address and ID');
+  if (!addr || !id) {return alert('Provide both address and ID');}
   await withLogs(() => window.api.importResource(state.cwd, addr, id));
   // State has changed; invalidate any previous plan overlay
   state.latestPlanJson = null;
@@ -1134,8 +1134,8 @@ async function buildGraph() {
     for (const rc of planJson.resource_changes) {
       const actions = (rc.change && rc.change.actions) || [];
       if (actions.includes('create')) {
-        if (rc.address) plannedCreates.add(baseAddress(rc.address));
-        else if (rc.type && rc.name) plannedCreates.add(baseAddress(`${rc.type}.${rc.name}`));
+        if (rc.address) {plannedCreates.add(baseAddress(rc.address));}
+        else if (rc.type && rc.name) {plannedCreates.add(baseAddress(`${rc.type}.${rc.name}`));}
       }
     }
   }
@@ -1145,17 +1145,17 @@ async function buildGraph() {
   if (planJson && Array.isArray(planJson.resource_changes)) {
     for (const rc of planJson.resource_changes) {
       const addr = baseAddress(rc.address || (rc.type && rc.name ? `${rc.type}.${rc.name}` : ''));
-      if (!addr) continue;
+      if (!addr) {continue;}
       const actions = (rc.change && rc.change.actions) || [];
       let change = '';
       const hasCreate = actions.includes('create');
       const hasDelete = actions.includes('delete');
       const hasUpdate = actions.includes('update');
-      if (hasCreate && hasDelete) change = 'replace';
-      else if (hasUpdate) change = 'modify';
-      else if (hasCreate) change = 'create';
-      else if (hasDelete) change = 'delete';
-      if (change) changeBy.set(addr, change);
+      if (hasCreate && hasDelete) {change = 'replace';}
+      else if (hasUpdate) {change = 'modify';}
+      else if (hasCreate) {change = 'create';}
+      else if (hasDelete) {change = 'delete';}
+      if (change) {changeBy.set(addr, change);}
     }
   }
 
@@ -1174,18 +1174,18 @@ async function buildGraph() {
   const nodes = Array.from(nodeMap.values());
   // If something was planned but now exists, it should not be marked planned (e.g., after apply)
   for (const n of nodes) {
-    if (existing.has(n.id)) n.planned = false;
+    if (existing.has(n.id)) {n.planned = false;}
   }
   const edges = [];
 
   // Try to walk planned_values/values to find depends_on and expressions with references
   try {
     const collect = (module) => {
-      if (!module) return;
+      if (!module) {return;}
       const resArr = (module.resources || []).concat(module.child_modules?.flatMap((m) => m.resources || []) || []);
         for (const r of resArr) {
         const addr = r.address || (r.type && r.name ? `${r.type}.${r.name}` : null);
-        if (!addr) continue;
+        if (!addr) {continue;}
         const deps = new Set((r.depends_on || []).map((d) => baseAddress(normalizeRefToAddress(d) || d)));
         // Look into expressions for explicit references (plan JSON provides this)
         const expressions = r.expressions || {};
@@ -1195,22 +1195,22 @@ async function buildGraph() {
             const resModulePrefix = getModulePrefixFromAddress(addr);
             refs.forEach((ref) => {
               const a = normalizeRefToAddress(ref);
-              if (!a) return;
+              if (!a) {return;}
               if (a.startsWith('var.')) {
                 // Scope variable refs to the module of the resource being evaluated
                 const scopedVar = makeScopedVarId(a, resModulePrefix);
-                if (scopedVar) deps.add(baseAddress(scopedVar));
+                if (scopedVar) {deps.add(baseAddress(scopedVar));}
               } else {
                 deps.add(baseAddress(a));
               }
             });
         }
-        for (const d of deps) edges.push({ from: baseAddress(d), to: baseAddress(addr) });
+        for (const d of deps) {edges.push({ from: baseAddress(d), to: baseAddress(addr) });}
 
         // Capture IO (inputs/outputs names) for this resource
         const node = ensureNodeLocal(baseAddress(addr));
         // Inputs: keys used in expressions
-        for (const key of Object.keys(expressions)) node.inputs.add(key);
+        for (const key of Object.keys(expressions)) {node.inputs.add(key);}
         // Outputs: properties available in an instance (schema unavailable, best-effort from current state attributes)
         if (r.values && typeof r.values === 'object') {
           Object.keys(r.values).forEach((k) => node.outputs.add(k));
@@ -1219,23 +1219,23 @@ async function buildGraph() {
       (module.child_modules || []).forEach(collect);
     };
     // Edges from current state
-    if (showJson && showJson.values && showJson.values.root_module) collect(showJson.values.root_module);
+    if (showJson && showJson.values && showJson.values.root_module) {collect(showJson.values.root_module);}
     // Edges from planned state
-    if (planJson && planJson.planned_values && planJson.planned_values.root_module) collect(planJson.planned_values.root_module);
+    if (planJson && planJson.planned_values && planJson.planned_values.root_module) {collect(planJson.planned_values.root_module);}
   } catch (_) {}
 
   // Also walk configuration tree to gather inputs and module/variable scoping
   try {
     const cfgRoot = planJson && planJson.configuration && planJson.configuration.root_module;
     const collectCfg = (module, moduleAddrPrefix) => {
-      if (!module) return;
+      if (!module) {return;}
       const resources = module.resources || [];
       for (const r of resources) {
         const addr = baseAddress((moduleAddrPrefix ? moduleAddrPrefix + '.' : '') + `${r.type}.${r.name}`);
         ensureNodeLocal(addr);
         // Ensure module node exists (containment is visual via parent, no edge needed)
         if (moduleAddrPrefix) {
-          if (!nodeMap.has(moduleAddrPrefix)) nodeMap.set(moduleAddrPrefix, { id: moduleAddrPrefix, type: 'module', planned: false, inputs: new Set() });
+          if (!nodeMap.has(moduleAddrPrefix)) {nodeMap.set(moduleAddrPrefix, { id: moduleAddrPrefix, type: 'module', planned: false, inputs: new Set() });}
         }
         const expressions = r.expressions || {};
         for (const key of Object.keys(expressions)) {
@@ -1243,7 +1243,7 @@ async function buildGraph() {
           const refs = (expressions[key].references || []).filter(Boolean);
           refs.forEach((ref) => {
             const a = normalizeRefToAddress(ref);
-            if (!a) return;
+            if (!a) {return;}
             if (a.startsWith('var.')) {
               const scopedVar = makeScopedVarId(a, moduleAddrPrefix);
               edges.push({ from: scopedVar, to: addr });
@@ -1260,9 +1260,9 @@ async function buildGraph() {
         if (call && call.module) {
           const nextPrefix = (moduleAddrPrefix ? moduleAddrPrefix + '.' : '') + `module.${name}`;
           // create/mark module node
-          if (!nodeMap.has(nextPrefix)) nodeMap.set(nextPrefix, { id: nextPrefix, type: 'module', planned: false, inputs: new Set() });
+          if (!nodeMap.has(nextPrefix)) {nodeMap.set(nextPrefix, { id: nextPrefix, type: 'module', planned: false, inputs: new Set() });}
           // parent module contains child module
-          if (moduleAddrPrefix) edges.push({ from: moduleAddrPrefix, to: nextPrefix });
+          if (moduleAddrPrefix) {edges.push({ from: moduleAddrPrefix, to: nextPrefix });}
           // Module inputs: connect refs to module-scoped variable nodes (module.<name>.var.<input>)
           const modInputs = call.expressions || {};
           for (const inputName of Object.keys(modInputs)) {
@@ -1270,7 +1270,7 @@ async function buildGraph() {
             const refs = (modInputs[inputName].references || []).filter(Boolean);
             refs.forEach((ref) => {
               const a = normalizeRefToAddress(ref);
-              if (!a) return;
+              if (!a) {return;}
               if (a.startsWith('var.')) {
                 const scopedVar = makeScopedVarId(a, moduleAddrPrefix);
                 edges.push({ from: scopedVar, to: moduleVarId });
@@ -1287,7 +1287,7 @@ async function buildGraph() {
         }
       }
     };
-    if (cfgRoot) collectCfg(cfgRoot, '');
+    if (cfgRoot) {collectCfg(cfgRoot, '');}
   } catch (_) {}
 
   // (DOT graph fallback disabled; plan/state JSON provide sufficient data for edges)
@@ -1316,7 +1316,7 @@ async function buildGraph() {
       const targets = outgoingBy.get(v) || [];
       for (const s of sources) {
         for (const t of targets) {
-          if (!isVarId(s) && !isVarId(t)) spliced.push({ from: s, to: t });
+          if (!isVarId(s) && !isVarId(t)) {spliced.push({ from: s, to: t });}
         }
       }
     });
@@ -1341,16 +1341,16 @@ async function buildGraph() {
   for (const e of edges) {
     const validFrom = nodeMap.has(e.from) || nodeMap.has(e.from.split('.', 2).slice(0, 2).join('.'));
     const validTo = nodeMap.has(e.to) || nodeMap.has(e.to.split('.', 2).slice(0, 2).join('.'));
-    if (!validFrom || !validTo) continue;
+    if (!validFrom || !validTo) {continue;}
     const key = `${e.from}->${e.to}`;
-    if (seen.has(key)) continue;
+    if (seen.has(key)) {continue;}
     seen.add(key);
     filteredEdges.push(e);
   }
   // Node list is whatever is in nodeMap now
   const finalNodes = Array.from(nodeMap.values());
   state.graph = { nodes: finalNodes, edges: filteredEdges };
-  if (isGraphActive()) renderGraph();
+  if (isGraphActive()) {renderGraph();}
 }
 
 // (DOT parse helper removed)
@@ -1379,10 +1379,10 @@ function renderGraph() {
   for (const n of state.graph.nodes) {
     const change = n.change || '';
     let prefix = '';
-    if (change === 'create') prefix = '+ ';
-    else if (change === 'delete') prefix = '- ';
-    else if (change === 'modify') prefix = '~ ';
-    else if (change === 'replace') prefix = '-/+ ';
+    if (change === 'create') {prefix = '+ ';}
+    else if (change === 'delete') {prefix = '- ';}
+    else if (change === 'modify') {prefix = '~ ';}
+    else if (change === 'replace') {prefix = '-/+ ';}
     const ele = { data: { id: n.id, label: prefix + n.id, type: n.type || 'resource', planned: String(Boolean(n.planned)), change } };
     if (n.type !== 'module') {
       const parent = getModulePrefixFromAddress(n.id);
@@ -1422,7 +1422,7 @@ function renderGraph() {
 }
 
 function applyBestLayout() {
-  if (!cy) return;
+  if (!cy) {return;}
   const hasElk = !!(cy.layout && cytoscape && cytoscape.extensions && cytoscape.extensions('layout', 'elk'));
   if (hasElk) {
     cy.layout({
@@ -1460,7 +1460,7 @@ function applyBestLayout() {
 }
 
 function toggleModuleCollapse(node) {
-  if (!cy || !cy.expandCollapse) return;
+  if (!cy || !cy.expandCollapse) {return;}
   const api = cy.expandCollapse('get') || cy.expandCollapse({ layoutBy: { name: 'cose', animate: false } });
   let pending = 0;
   const done = () => {
@@ -1474,32 +1474,32 @@ function toggleModuleCollapse(node) {
   cy.on('expandcollapse.collapsedone', done);
   cy.on('expandcollapse.expanddone', done);
   pending = 1;
-  if (node.isExpandable && node.isExpandable()) api.expand(node);
-  else if (node.isCollapsible && node.isCollapsible()) api.collapse(node);
+  if (node.isExpandable && node.isExpandable()) {api.expand(node);}
+  else if (node.isCollapsible && node.isCollapsible()) {api.collapse(node);}
   else {
     // try toggle
-    if (node.data('expanded') === false) api.expand(node);
-    else api.collapse(node);
+    if (node.data('expanded') === false) {api.expand(node);}
+    else {api.collapse(node);}
   }
 }
 
 function isOverlapping() {
   const positions = new Map();
   const nodes = cy.nodes();
-  if (nodes.length <= 2) return false;
+  if (nodes.length <= 2) {return false;}
   nodes.forEach((n) => {
     const p = n.position();
     const key = `${Math.round(p.x / 10)}:${Math.round(p.y / 10)}`; // bucketed positions
     positions.set(key, (positions.get(key) || 0) + 1);
   });
   let maxBucket = 0;
-  positions.forEach((count) => { if (count > maxBucket) maxBucket = count; });
+  positions.forEach((count) => { if (count > maxBucket) {maxBucket = count;} });
   // If any bucket contains more than 20% of nodes, treat as overlapping
   return maxBucket / nodes.length > 0.2;
 }
 
 function collapseExpandModules(collapse) {
-  if (!cy || !cy.expandCollapse) return;
+  if (!cy || !cy.expandCollapse) {return;}
   const api = cy.expandCollapse('get') || cy.expandCollapse({ layoutBy: { name: 'cose', animate: false } });
   const modules = cy.nodes('[type = "module"]');
   let pending = 0;
@@ -1515,9 +1515,9 @@ function collapseExpandModules(collapse) {
   cy.on('expandcollapse.expanddone', done);
   modules.forEach((n) => {
     pending++;
-    if (collapse) api.collapse(n); else api.expand(n);
+    if (collapse) {api.collapse(n);} else {api.expand(n);}
   });
-  if (pending === 0) applyBestLayout();
+  if (pending === 0) {applyBestLayout();}
 }
 
 // (legacy drag helper removed)
@@ -1572,16 +1572,16 @@ function hideRenameModal() {
 }
 
 function showImportModal(defaultAddress) {
-  if (!ui.importModal) return;
+  if (!ui.importModal) {return;}
   ui.importModal.dataset.address = defaultAddress || '';
-  if (ui.importAddress) ui.importAddress.value = defaultAddress || '';
-  if (ui.importIdInput) ui.importIdInput.value = '';
+  if (ui.importAddress) {ui.importAddress.value = defaultAddress || '';}
+  if (ui.importIdInput) {ui.importIdInput.value = '';}
   ui.importModal.classList.remove('hidden');
   setTimeout(() => ui.importAddress && ui.importAddress.focus(), 0);
 }
 
 function hideImportModal() {
-  if (!ui.importModal) return;
+  if (!ui.importModal) {return;}
   ui.importModal.classList.add('hidden');
   ui.importModal.dataset.address = '';
 }
@@ -1597,16 +1597,16 @@ function wireContextMenu() {
   }
   ui.contextMenu.addEventListener('click', async (e) => {
     const item = e.target.closest('.menu-item');
-    if (!item) return;
+    if (!item) {return;}
     const action = item.dataset.action;
     const address = ui.contextMenu.dataset.address;
     hideContextMenu();
-    if (!address) return;
+    if (!address) {return;}
     if (action === 'rename') {
       showRenameModal(address);
     } else if (action === 'remove') {
       const ok = confirm(`Remove ${address} from state?`);
-      if (!ok) return;
+      if (!ok) {return;}
       await withLogs(() => window.api.stateRemove(state.cwd, address));
       await refreshResources();
     } else if (action === 'show') {
@@ -1626,7 +1626,7 @@ function wireContextMenu() {
       // Graph collapse (if present)
       if (cy) {
         const n = cy.getElementById(address);
-        if (n && n.data('type') === 'module') toggleModuleCollapse(n);
+        if (n && n.data('type') === 'module') {toggleModuleCollapse(n);}
       }
     } else if (action === 'expand-module') {
       // Resources sidebar expand
@@ -1637,7 +1637,7 @@ function wireContextMenu() {
       // Graph expand (if present)
       if (cy) {
         const n = cy.getElementById(address);
-        if (n && n.data('type') === 'module') toggleModuleCollapse(n);
+        if (n && n.data('type') === 'module') {toggleModuleCollapse(n);}
       }
     }
   });
@@ -1648,7 +1648,7 @@ function wireEvents() {
   if (ui.tfWorkspaceSelect) {
     ui.tfWorkspaceSelect.addEventListener('change', async () => {
       const name = ui.tfWorkspaceSelect.value;
-      if (!state.cwd || !name) return;
+      if (!state.cwd || !name) {return;}
       await withLogs(() => window.api.selectWorkspaceName(state.cwd, name));
       await refreshWorkspaceMeta();
       await refreshResources();
@@ -1659,30 +1659,30 @@ function wireEvents() {
   ui.btnApply.addEventListener('click', doApply);
   ui.btnRefresh.addEventListener('click', doRefresh);
   // destroy feature removed
-  if (ui.btnStateMv) ui.btnStateMv.addEventListener('click', doStateMove);
-  if (ui.btnStateRm) ui.btnStateRm.addEventListener('click', doStateRemove);
-  if (ui.btnImport) ui.btnImport.addEventListener('click', doImport);
+  if (ui.btnStateMv) {ui.btnStateMv.addEventListener('click', doStateMove);}
+  if (ui.btnStateRm) {ui.btnStateRm.addEventListener('click', doStateRemove);}
+  if (ui.btnImport) {ui.btnImport.addEventListener('click', doImport);}
   ui.tabInspect.addEventListener('click', () => activateTab('inspect'));
   ui.tabGraph.addEventListener('click', () => activateTab('graph'));
   const collapseBtn = document.getElementById('btn-collapse-modules');
   const expandBtn = document.getElementById('btn-expand-modules');
   const relayoutBtn = document.getElementById('btn-relayout');
-  if (collapseBtn) collapseBtn.addEventListener('click', () => { collapseExpandModules(true); applyBestLayout(); });
-  if (expandBtn) expandBtn.addEventListener('click', () => { collapseExpandModules(false); applyBestLayout(); });
-  if (relayoutBtn) relayoutBtn.addEventListener('click', () => applyBestLayout());
+  if (collapseBtn) {collapseBtn.addEventListener('click', () => { collapseExpandModules(true); applyBestLayout(); });}
+  if (expandBtn) {expandBtn.addEventListener('click', () => { collapseExpandModules(false); applyBestLayout(); });}
+  if (relayoutBtn) {relayoutBtn.addEventListener('click', () => applyBestLayout());}
   // Resources sidebar controls
   const resCollapseAll = document.getElementById('btn-res-collapse-all');
   const resExpandAll = document.getElementById('btn-res-expand-all');
-  if (resCollapseAll) resCollapseAll.addEventListener('click', () => {
+  if (resCollapseAll) {resCollapseAll.addEventListener('click', () => {
     // Collapse all known modules
     state.knownModules.forEach((m) => state.expandedModules.delete(m));
     renderResources();
-  });
-  if (resExpandAll) resExpandAll.addEventListener('click', () => {
+  });}
+  if (resExpandAll) {resExpandAll.addEventListener('click', () => {
     // Expand all known modules
     state.knownModules.forEach((m) => state.expandedModules.add(m));
     renderResources();
-  });
+  });}
   wireContextMenu();
 
   // Logs collapse
@@ -1699,7 +1699,7 @@ function wireEvents() {
         ui.btnToggleLogs.textContent = '▾';
         ui.btnToggleLogs.setAttribute('aria-expanded', 'true');
         logs.classList.remove('collapsed');
-        if (state.logsHeightPct < 15) state.logsHeightPct = 30;
+        if (state.logsHeightPct < 15) {state.logsHeightPct = 30;}
       }
       updateLayoutSizes();
     });
@@ -1714,7 +1714,7 @@ function wireEvents() {
       openLogsSearch();
     }
   });
-  if (ui.logsSearchClose) ui.logsSearchClose.addEventListener('click', closeLogsSearch);
+  if (ui.logsSearchClose) {ui.logsSearchClose.addEventListener('click', closeLogsSearch);}
   if (ui.logsSearchInput) {
     ui.logsSearchInput.addEventListener('input', () => performLogsSearch());
     ui.logsSearchInput.addEventListener('keydown', (ev) => {
@@ -1726,14 +1726,14 @@ function wireEvents() {
       }
     });
   }
-  if (ui.logsSearchNext) ui.logsSearchNext.addEventListener('click', () => performLogsSearch('next'));
-  if (ui.logsSearchPrev) ui.logsSearchPrev.addEventListener('click', () => performLogsSearch('prev'));
+  if (ui.logsSearchNext) {ui.logsSearchNext.addEventListener('click', () => performLogsSearch('next'));}
+  if (ui.logsSearchPrev) {ui.logsSearchPrev.addEventListener('click', () => performLogsSearch('prev'));}
 
   // Sidebar resizer drag
   if (ui.resizerSidebar) {
     let dragging = false;
     const onMove = (ev) => {
-      if (!dragging) return;
+      if (!dragging) {return;}
       const x = ev.touches ? ev.touches[0].clientX : ev.clientX;
       state.sidebarWidthPx = Math.max(220, Math.min(x, window.innerWidth - 300));
       updateLayoutSizes();
@@ -1748,7 +1748,7 @@ function wireEvents() {
   if (ui.resizerLogs) {
     let draggingV = false;
     const onMoveV = (ev) => {
-      if (!draggingV) return;
+      if (!draggingV) {return;}
       const y = ev.touches ? ev.touches[0].clientY : ev.clientY;
       const content = document.querySelector('.content');
       const rect = content.getBoundingClientRect();
@@ -1772,7 +1772,7 @@ function wireEvents() {
   if (window.api && typeof window.api.onCommand === 'function') {
     window.api.onCommand((payload) => {
       const toast = document.getElementById('toast');
-      if (!toast || !payload || !payload.event) return;
+      if (!toast || !payload || !payload.event) {return;}
       if (payload.event === 'start') {
         const label = String(payload.label || 'terraform');
         toast.textContent = `Running: ${label}`;
@@ -1792,7 +1792,7 @@ function wireEvents() {
     const address = ui.renameModal.dataset.source || ui.contextMenu.dataset.address || state.selectedAddress || '';
     const dest = (ui.renameInput.value || '').trim();
     hideRenameModal();
-    if (!address || !dest || dest === address) return;
+    if (!address || !dest || dest === address) {return;}
     const base = baseAddress(address);
     const isModule = String(address).startsWith('module.');
     const hasIndex = String(address).includes('[');
@@ -1855,24 +1855,24 @@ function wireEvents() {
   });
 
   // Import modal actions
-  if (ui.btnImportCancel) ui.btnImportCancel.addEventListener('click', hideImportModal);
-  if (ui.btnImportOk) ui.btnImportOk.addEventListener('click', async () => {
+  if (ui.btnImportCancel) {ui.btnImportCancel.addEventListener('click', hideImportModal);}
+  if (ui.btnImportOk) {ui.btnImportOk.addEventListener('click', async () => {
     const address = (ui.importAddress && ui.importAddress.value || ui.importModal.dataset.address || '').trim();
     const id = (ui.importIdInput && ui.importIdInput.value || '').trim();
     hideImportModal();
-    if (!address || !id) return;
+    if (!address || !id) {return;}
     const varFiles = getSelectedVarFilesArray();
     await withLogs(() => window.api.importResource(state.cwd, address, id, { varFiles }));
     await refreshResources();
-  });
-  if (ui.importAddress) ui.importAddress.addEventListener('keydown', (ev) => {
-    if (ev.key === 'Enter') ui.btnImportOk && ui.btnImportOk.click();
-    else if (ev.key === 'Escape') hideImportModal();
-  });
-  if (ui.importIdInput) ui.importIdInput.addEventListener('keydown', (ev) => {
-    if (ev.key === 'Enter') ui.btnImportOk && ui.btnImportOk.click();
-    else if (ev.key === 'Escape') hideImportModal();
-  });
+  });}
+  if (ui.importAddress) {ui.importAddress.addEventListener('keydown', (ev) => {
+    if (ev.key === 'Enter') {ui.btnImportOk && ui.btnImportOk.click();}
+    else if (ev.key === 'Escape') {hideImportModal();}
+  });}
+  if (ui.importIdInput) {ui.importIdInput.addEventListener('keydown', (ev) => {
+    if (ev.key === 'Enter') {ui.btnImportOk && ui.btnImportOk.click();}
+    else if (ev.key === 'Escape') {hideImportModal();}
+  });}
 
   // History controls
   if (ui.historySelect) {
@@ -1883,7 +1883,7 @@ function wireEvents() {
   if (ui.btnClearHistory) {
     ui.btnClearHistory.addEventListener('click', async () => {
       const ok = confirm('Clear all saved command logs?');
-      if (!ok) return;
+      if (!ok) {return;}
       await window.api.clearHistory();
       state.selectedHistoryId = '';
       await loadHistoryList();
