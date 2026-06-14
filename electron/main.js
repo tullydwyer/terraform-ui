@@ -2,6 +2,7 @@ const { app, BrowserWindow, ipcMain, dialog, shell, Menu } = require('electron')
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
+const crypto = require('crypto');
 const { spawn } = require('child_process');
 
 /**
@@ -15,6 +16,7 @@ const historyDir = path.join(userDataDir, 'history');
 const historyLogsDir = path.join(historyDir, 'logs');
 const historyIndexPath = path.join(historyDir, 'index.json');
 const HISTORY_LIMIT = 200; // keep last N records
+const appBuildInfo = createAppBuildInfo();
 
 /**
  * In-memory index of history items
@@ -22,6 +24,62 @@ const HISTORY_LIMIT = 200; // keep last N records
  */
 let historyIndex = [];
 const stateSnapshotCache = new Map();
+
+function collectBuildHashFiles(rootDir) {
+  const files = [];
+  const includeFile = (filePath) => {
+    if (fs.existsSync(filePath)) {
+      files.push(filePath);
+    }
+  };
+  const walk = (dirPath) => {
+    let entries = [];
+    try {
+      entries = fs.readdirSync(dirPath, { withFileTypes: true });
+    } catch (_) {
+      return;
+    }
+    for (const entry of entries) {
+      const fullPath = path.join(dirPath, entry.name);
+      if (entry.isDirectory()) {
+        walk(fullPath);
+      } else if (entry.isFile()) {
+        files.push(fullPath);
+      }
+    }
+  };
+
+  includeFile(path.join(rootDir, 'package.json'));
+  walk(path.join(rootDir, 'electron'));
+  walk(path.join(rootDir, 'renderer'));
+
+  return files.sort((a, b) => a.localeCompare(b));
+}
+
+function createAppBuildInfo() {
+  const rootDir = path.join(__dirname, '..');
+  const hasher = crypto.createHash('sha256');
+  const files = collectBuildHashFiles(rootDir);
+  for (const filePath of files) {
+    try {
+      const relativePath = path.relative(rootDir, filePath).replace(/\\/g, '/');
+      hasher.update(relativePath);
+      hasher.update('\0');
+      hasher.update(fs.readFileSync(filePath));
+      hasher.update('\0');
+    } catch (_) {}
+  }
+  const hash = hasher.digest('hex').slice(0, 8);
+  const version = app.getVersion();
+  const mode = app.isPackaged ? 'prod' : 'dev';
+  return {
+    hash,
+    mode,
+    version,
+    startedAt: new Date().toISOString(),
+    title: `Terraform UI - build ${hash}`,
+  };
+}
 
 function ensureHistoryStorage() {
   try {
@@ -150,6 +208,7 @@ let mainWindow;
 
 function createWindow() {
   mainWindow = new BrowserWindow({
+    title: appBuildInfo.title,
     width: 1280,
     height: 800,
     webPreferences: {
@@ -164,6 +223,11 @@ function createWindow() {
 
   // Hide native menu bar (Windows/Linux)
   try { mainWindow.setMenuBarVisibility(false); } catch (_) {}
+
+  mainWindow.webContents.on('page-title-updated', (event) => {
+    event.preventDefault();
+    mainWindow.setTitle(appBuildInfo.title);
+  });
 
   mainWindow.once('ready-to-show', () => {
     try {
@@ -753,6 +817,10 @@ ipcMain.handle('workspace:select', async () => {
 // Open external URLs (if any are added later)
 ipcMain.handle('openExternal', async (_event, url) => {
   await shell.openExternal(url);
+});
+
+ipcMain.handle('app:build-info', async () => {
+  return appBuildInfo;
 });
 
 // Terraform commands

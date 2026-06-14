@@ -87,6 +87,20 @@ let cy = null;
 let cyEventsBound = false;
 let inflightCount = 0;
 
+async function applyBuildTitle() {
+  if (!window.api || typeof window.api.getBuildInfo !== 'function') {return;}
+  try {
+    const info = await window.api.getBuildInfo();
+    if (!info || !info.title) {return;}
+    document.title = info.title;
+    const brandText = document.querySelector('.brand-text');
+    if (brandText) {
+      const started = info.startedAt ? new Date(info.startedAt).toLocaleString() : '';
+      brandText.title = [`Build ${info.hash || 'unknown'}`, started ? `Started ${started}` : ''].filter(Boolean).join('\n');
+    }
+  } catch (_) {}
+}
+
 function setSpinnerVisible(visible) {
   if (!ui.spinner) {return;}
   if (visible) {ui.spinner.classList.remove('hidden');}
@@ -1940,6 +1954,7 @@ function wireEvents() {
 }
 
 async function boot() {
+  await applyBuildTitle();
   wireEvents();
   updateLayoutSizes();
   // Initial history load

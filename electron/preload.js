@@ -1,6 +1,8 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('api', {
+  getBuildInfo: () => ipcRenderer.invoke('app:build-info'),
+
   // Workspace
   getWorkspace: () => ipcRenderer.invoke('workspace:get'),
   setWorkspace: (path) => ipcRenderer.invoke('workspace:set', path),
