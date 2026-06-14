@@ -14,6 +14,7 @@ contextBridge.exposeInMainWorld('api', {
   destroy: (cwd, options) => ipcRenderer.invoke('terraform:destroy', cwd, options),
   refresh: (cwd, options) => ipcRenderer.invoke('terraform:refresh', cwd, options),
   stateList: (cwd) => ipcRenderer.invoke('terraform:state:list', cwd),
+  stateStorage: (cwd) => ipcRenderer.invoke('terraform:state:storage', cwd),
   stateShow: (cwd, address) => ipcRenderer.invoke('terraform:state:show', cwd, address),
   showJson: (cwd) => ipcRenderer.invoke('terraform:show:json', cwd),
   stateMove: (cwd, sourceAddress, destAddress) => ipcRenderer.invoke('terraform:state:mv', cwd, sourceAddress, destAddress),

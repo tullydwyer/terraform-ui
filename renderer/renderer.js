@@ -1,6 +1,7 @@
 const ui = {
   btnOpenWorkspace: document.getElementById('btn-open-workspace'),
   workspacePath: document.getElementById('workspace-path'),
+  stateStorageIndicator: document.getElementById('state-storage-indicator'),
   snapshotIndicator: document.getElementById('snapshot-indicator'),
   spinner: document.getElementById('global-spinner'),
   tfWorkspaceSelect: document.getElementById('tf-workspace-select'),
@@ -68,6 +69,7 @@ let state = {
   latestPlanJson: null,
   graphPositions: new Map(), // address -> {x,y}
   snapshotAt: null, // ISO string when terraform state was last pulled
+  stateStorage: null,
   terraformWorkspaces: { list: [], current: '' },
   selectedVarFiles: new Set(),
   sidebarWidthPx: 320,
@@ -234,6 +236,8 @@ function setWorkspace(cwd) {
   // Reset selections on workspace change
   state.selectedVarFiles = new Set();
   state.terraformWorkspaces = { list: [], current: '' };
+  state.stateStorage = null;
+  renderStateStorageIndicator();
   renderTfvarsList();
   renderWorkspaceDropdown();
 }
@@ -268,6 +272,39 @@ function renderSnapshotIndicator() {
   } else {
     ui.snapshotIndicator.title = 'Last state pull time unavailable';
   }
+}
+
+function renderStateStorageIndicator() {
+  if (!ui.stateStorageIndicator) {return;}
+  if (!state.cwd) {
+    ui.stateStorageIndicator.textContent = 'State: —';
+    ui.stateStorageIndicator.title = 'Terraform state storage location unavailable';
+    return;
+  }
+  const info = state.stateStorage;
+  if (!info || info.code !== 0) {
+    ui.stateStorageIndicator.textContent = 'State: checking...';
+    ui.stateStorageIndicator.title = 'Checking Terraform state storage location';
+    return;
+  }
+  const detail = info.detail ? ` - ${info.detail}` : '';
+  ui.stateStorageIndicator.textContent = `${info.label || 'State: Unknown'}${detail}`;
+  ui.stateStorageIndicator.title = info.title || 'Terraform state storage location unavailable';
+}
+
+async function refreshStateStorage() {
+  if (!state.cwd || !window.api || typeof window.api.stateStorage !== 'function') {
+    state.stateStorage = null;
+    renderStateStorageIndicator();
+    return;
+  }
+  renderStateStorageIndicator();
+  try {
+    state.stateStorage = await window.api.stateStorage(state.cwd);
+  } catch (_) {
+    state.stateStorage = { code: 1, error: 'Unable to determine Terraform state storage location' };
+  }
+  renderStateStorageIndicator();
 }
 
 async function ensureWorkspaceSelected() {
@@ -404,6 +441,7 @@ async function refreshWorkspaceMeta() {
     state.terraformWorkspaces = { list: [], current: '' };
   }
   renderWorkspaceDropdown();
+  await refreshStateStorage();
   // Tfvars
   try {
     const res = await window.api.listTfvars(state.cwd);
@@ -1004,6 +1042,7 @@ async function doInit() {
   // Basic init options can be extended later; keep defaults checked in UI
   const options = {};
   await withLogs(() => window.api.init(state.cwd, options));
+  await refreshWorkspaceMeta();
   await refreshResources();
   if (isGraphActive()) {renderGraph();}
 }

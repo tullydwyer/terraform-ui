@@ -419,6 +419,227 @@ function findTfvarsFiles(rootDir) {
   return results;
 }
 
+function readJsonFile(filePath) {
+  try {
+    if (!fs.existsSync(filePath)) {return null;}
+    return JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+  } catch (_) {
+    return null;
+  }
+}
+
+function readCurrentTerraformWorkspace(cwd) {
+  try {
+    const envPath = path.join(cwd, '.terraform', 'environment');
+    if (fs.existsSync(envPath)) {
+      const name = fs.readFileSync(envPath, 'utf-8').trim();
+      if (name) {return name;}
+    }
+  } catch (_) {}
+  return 'default';
+}
+
+function findDeclaredBackendType(cwd) {
+  try {
+    const entries = fs.readdirSync(cwd, { withFileTypes: true });
+    for (const ent of entries) {
+      if (!ent.isFile() || !/\.tf$/i.test(ent.name)) {continue;}
+      const text = fs.readFileSync(path.join(cwd, ent.name), 'utf-8');
+      const match = text.match(/\bbackend\s+"([^"]+)"/);
+      if (match && match[1]) {
+        return { type: match[1], file: ent.name };
+      }
+    }
+  } catch (_) {}
+  return null;
+}
+
+function displayBackendName(type) {
+  const names = {
+    azurerm: 'Azure Storage',
+    cloud: 'Terraform Cloud',
+    consul: 'Consul',
+    cos: 'Tencent COS',
+    etcd: 'etcd',
+    etcdv3: 'etcd v3',
+    gcs: 'Google Cloud Storage',
+    http: 'HTTP',
+    kubernetes: 'Kubernetes',
+    local: 'Local',
+    oss: 'Alibaba OSS',
+    pg: 'PostgreSQL',
+    remote: 'Terraform Cloud',
+    s3: 'Amazon S3',
+  };
+  return names[type] || String(type || 'Unknown');
+}
+
+function safeConfigString(value) {
+  if (value === undefined || value === null || value === '') {return '';}
+  if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+    return String(value);
+  }
+  return '';
+}
+
+function redactUrl(raw) {
+  const text = safeConfigString(raw);
+  if (!text) {return '';}
+  try {
+    const url = new URL(text);
+    if (url.username) {url.username = 'redacted';}
+    if (url.password) {url.password = 'redacted';}
+    for (const key of Array.from(url.searchParams.keys())) {
+      if (/(token|secret|password|sig|signature|key|credential)/i.test(key)) {
+        url.searchParams.set(key, 'redacted');
+      }
+    }
+    return url.toString();
+  } catch (_) {
+    return text.replace(/\/\/([^:@/]+):([^@/]+)@/, '//redacted:redacted@');
+  }
+}
+
+function safeFieldsForBackend(type, config, workspace) {
+  const cfg = config && typeof config === 'object' ? config : {};
+  const get = (key) => safeConfigString(cfg[key]);
+  const fields = [];
+  const add = (label, value) => {
+    if (value) {fields.push({ label, value });}
+  };
+
+  if (type === 's3') {
+    const bucket = get('bucket');
+    const key = get('key');
+    const prefix = get('workspace_key_prefix') || 'env:';
+    const effectiveKey = workspace && workspace !== 'default' && key ? `${prefix}/${workspace}/${key}` : key;
+    add('Bucket', bucket);
+    add('Object', effectiveKey);
+    add('Region', get('region'));
+  } else if (type === 'azurerm') {
+    add('Storage account', get('storage_account_name'));
+    add('Container', get('container_name'));
+    add('Blob', get('key'));
+    add('Resource group', get('resource_group_name'));
+  } else if (type === 'gcs') {
+    add('Bucket', get('bucket'));
+    add('Prefix', get('prefix'));
+  } else if (type === 'local') {
+    add('Path', get('path'));
+    add('Workspace directory', get('workspace_dir'));
+  } else if (type === 'remote' || type === 'cloud') {
+    add('Hostname', get('hostname'));
+    add('Organization', get('organization'));
+    if (cfg.workspaces && typeof cfg.workspaces === 'object') {
+      add('Workspace', safeConfigString(cfg.workspaces.name));
+      add('Workspace prefix', safeConfigString(cfg.workspaces.prefix));
+    }
+  } else if (type === 'http') {
+    add('Address', redactUrl(cfg.address));
+  } else if (type === 'consul') {
+    add('Address', redactUrl(cfg.address));
+    add('Path', get('path'));
+  } else if (type === 'kubernetes') {
+    add('Secret', get('secret_suffix') || get('secret_name'));
+    add('Namespace', get('namespace'));
+  } else if (type === 'pg') {
+    add('Schema', get('schema_name'));
+  } else {
+    const allow = ['bucket', 'container', 'container_name', 'endpoint', 'hostname', 'key', 'name', 'organization', 'path', 'prefix', 'region', 'storage_account_name'];
+    for (const key of allow) {
+      add(key.replace(/_/g, ' '), safeConfigString(cfg[key]));
+    }
+  }
+
+  add('Workspace', workspace || 'default');
+  return fields;
+}
+
+function resolveLocalStatePath(cwd, config, workspace) {
+  const cfg = config && typeof config === 'object' ? config : {};
+  if (workspace && workspace !== 'default') {
+    const workspaceDir = safeConfigString(cfg.workspace_dir) || 'terraform.tfstate.d';
+    return path.resolve(cwd, workspaceDir, workspace, 'terraform.tfstate');
+  }
+  const statePath = safeConfigString(cfg.path) || 'terraform.tfstate';
+  return path.isAbsolute(statePath) ? statePath : path.resolve(cwd, statePath);
+}
+
+function compactStateStorageDetail(type, fields) {
+  const valueFor = (label) => {
+    const field = fields.find((f) => f.label === label);
+    return field ? field.value : '';
+  };
+  if (type === 's3') {
+    return [valueFor('Bucket'), valueFor('Object')].filter(Boolean).join('/');
+  }
+  if (type === 'azurerm') {
+    return [valueFor('Storage account'), valueFor('Container'), valueFor('Blob')].filter(Boolean).join('/');
+  }
+  if (type === 'gcs') {
+    return [valueFor('Bucket'), valueFor('Prefix')].filter(Boolean).join('/');
+  }
+  if (type === 'local') {
+    return valueFor('Path');
+  }
+  if (type === 'remote' || type === 'cloud') {
+    return [valueFor('Organization'), valueFor('Workspace') || valueFor('Workspace prefix')].filter(Boolean).join('/');
+  }
+  return fields.length ? fields[0].value : '';
+}
+
+function buildStateStorageInfo(cwd) {
+  const workspace = readCurrentTerraformWorkspace(cwd);
+  const backendStatePath = path.join(cwd, '.terraform', 'terraform.tfstate');
+  const backendState = readJsonFile(backendStatePath);
+  const backend = backendState && backendState.backend && typeof backendState.backend === 'object'
+    ? backendState.backend
+    : null;
+
+  let type = backend && backend.type ? String(backend.type) : '';
+  let config = backend && backend.config && typeof backend.config === 'object' ? backend.config : {};
+  let source = backend ? 'initialized' : 'fallback';
+  let note = '';
+
+  if (!type) {
+    const declared = findDeclaredBackendType(cwd);
+    if (declared) {
+      type = declared.type;
+      source = 'declared';
+      note = `Backend declared in ${declared.file}, but initialized backend metadata was not found.`;
+    } else {
+      type = 'local';
+      source = 'local-default';
+      note = 'No initialized backend metadata or backend declaration was found.';
+    }
+  }
+
+  if (type === 'local') {
+    config = { ...config, path: resolveLocalStatePath(cwd, config, workspace) };
+  }
+
+  const fields = safeFieldsForBackend(type, config, workspace);
+  const displayName = displayBackendName(type);
+  const detail = compactStateStorageDetail(type, fields);
+  const titleLines = [
+    `Terraform state backend: ${displayName} (${type})`,
+    ...fields.map((field) => `${field.label}: ${field.value}`),
+  ];
+  if (note) {titleLines.push(note);}
+
+  return {
+    code: 0,
+    type,
+    displayName,
+    label: `State: ${displayName}`,
+    detail,
+    fields,
+    source,
+    workspace,
+    title: titleLines.join('\n'),
+  };
+}
+
 // Workspace persistence helpers
 ipcMain.handle('workspace:get', async () => {
   const cfg = readConfig();
@@ -540,6 +761,15 @@ ipcMain.handle('terraform:state:list', async (_e, cwd) => {
     }
     return { ...pullRes, resources, snapshotAt };
   });
+});
+
+ipcMain.handle('terraform:state:storage', async (_e, cwd) => {
+  try {
+    if (!isValidDirectory(cwd)) {return { code: 1, error: 'Invalid workspace directory' };}
+    return buildStateStorageInfo(cwd);
+  } catch (err) {
+    return { code: 1, error: String(err && err.message ? err.message : err) };
+  }
 });
 
 ipcMain.handle('terraform:state:show', async (_e, cwd, address) => {
