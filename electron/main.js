@@ -21,6 +21,7 @@ const HISTORY_LIMIT = 200; // keep last N records
  * Each item: { id, label, cwd, args, startAt, endAt, exitCode }
  */
 let historyIndex = [];
+const stateSnapshotCache = new Map();
 
 function ensureHistoryStorage() {
   try {
@@ -347,6 +348,84 @@ function extractAddressesFromTfstateJson(stateObj) {
   } catch (_) {
     return [];
   }
+}
+
+function getStateSnapshotCacheKey(cwd) {
+  try {
+    return path.resolve(String(cwd || ''));
+  } catch (_) {
+    return String(cwd || '');
+  }
+}
+
+function invalidateStateSnapshot(cwd) {
+  if (cwd) {
+    stateSnapshotCache.delete(getStateSnapshotCacheKey(cwd));
+    return;
+  }
+  stateSnapshotCache.clear();
+}
+
+async function getStateSnapshot(cwd, options = {}) {
+  const key = getStateSnapshotCacheKey(cwd);
+  const cached = stateSnapshotCache.get(key);
+  if (!options.force && cached) {
+    return { ...cached, fromCache: true };
+  }
+
+  const pullRes = await runTerraformStreamed(cwd, ['state', 'pull']);
+  let stateJson = null;
+  let resources = [];
+  let snapshotAt = null;
+  try {
+    stateJson = JSON.parse(pullRes.stdout || '');
+    resources = extractAddressesFromTfstateJson(stateJson);
+    snapshotAt = new Date().toISOString();
+  } catch (_) {
+    return { ...pullRes, stateJson: null, resources: [], snapshotAt: null, fromCache: false };
+  }
+
+  const createdAt = Date.now();
+  const snapshot = {
+    code: pullRes.code,
+    stdout: pullRes.stdout,
+    stderr: pullRes.stderr,
+    args: pullRes.args,
+    stateJson,
+    resources,
+    snapshotAt,
+    createdAt,
+  };
+  if (pullRes.code === 0) {
+    stateSnapshotCache.set(key, snapshot);
+  }
+  return { ...snapshot, fromCache: false };
+}
+
+async function withStateSnapshotFile(cwd, fn) {
+  const snapshot = await getStateSnapshot(cwd);
+  if (snapshot.code !== 0 || !snapshot.stdout) {
+    return { snapshot, result: null };
+  }
+
+  const tmpName = `tfstate-ui-${Date.now()}-${Math.random().toString(36).slice(2)}.tfstate`;
+  const tmpPath = path.join(os.tmpdir(), tmpName);
+  try {
+    fs.writeFileSync(tmpPath, snapshot.stdout, 'utf-8');
+    const result = await fn(tmpPath, snapshot);
+    return { snapshot, result };
+  } catch (_) {
+    return { snapshot, result: null };
+  } finally {
+    try { fs.unlinkSync(tmpPath); } catch (_) { /* ignore unlink failure */ }
+  }
+}
+
+async function withStateMutation(label, cwd, fn) {
+  invalidateStateSnapshot(cwd);
+  const res = await withValidCwd(label, cwd, fn);
+  invalidateStateSnapshot(cwd);
+  return res;
 }
 
 async function detectRefreshOnlySupport(workingDirectory) {
@@ -690,7 +769,7 @@ ipcMain.handle('terraform:init', async (_e, cwd, options = {}) => {
       }
     }
   } catch (_) {}
-  return withValidCwd('init', cwd, () => runTerraformStreamed(cwd, args));
+  return withStateMutation('init', cwd, () => runTerraformStreamed(cwd, args));
 });
 
 function buildPlanArgs(options) {
@@ -721,17 +800,17 @@ ipcMain.handle('terraform:plan', async (_e, cwd, options) => {
 
 ipcMain.handle('terraform:apply', async (_e, cwd, options) => {
   const varArgs = buildVarFileArgs(options && options.varFiles);
-  return withValidCwd('apply', cwd, () => runTerraformStreamed(cwd, ['apply', '-input=false', '-auto-approve', ...varArgs]));
+  return withStateMutation('apply', cwd, () => runTerraformStreamed(cwd, ['apply', '-input=false', '-auto-approve', ...varArgs]));
 });
 
 ipcMain.handle('terraform:destroy', async (_e, cwd, options) => {
   const varArgs = buildVarFileArgs(options && options.varFiles);
-  return withValidCwd('destroy', cwd, () => runTerraformStreamed(cwd, ['destroy', '-input=false', '-auto-approve', ...varArgs]));
+  return withStateMutation('destroy', cwd, () => runTerraformStreamed(cwd, ['destroy', '-input=false', '-auto-approve', ...varArgs]));
 });
 
 ipcMain.handle('terraform:refresh', async (_e, cwd, options) => {
   const varArgs = buildVarFileArgs(options && options.varFiles);
-  return withValidCwd('refresh', cwd, async () => {
+  return withStateMutation('refresh', cwd, async () => {
     const supportsRefreshOnly = await detectRefreshOnlySupport(cwd);
     if (supportsRefreshOnly) {
       return runTerraformStreamed(cwd, ['apply', '-refresh-only', '-input=false', '-auto-approve', ...varArgs]);
@@ -743,23 +822,18 @@ ipcMain.handle('terraform:refresh', async (_e, cwd, options) => {
 ipcMain.handle('terraform:state:list', async (_e, cwd) => {
   return withValidCwd('state pull', cwd, async () => {
     // Prefer pulling state JSON and deriving addresses for remote/local backends uniformly
-    const pullRes = await runTerraformStreamed(cwd, ['state', 'pull']);
-    let resources = [];
-    let snapshotAt = null;
-    try {
-      const obj = JSON.parse(pullRes.stdout || '');
-      resources = extractAddressesFromTfstateJson(obj);
-      snapshotAt = new Date().toISOString();
-    } catch (_) {
+    const snapshot = await getStateSnapshot(cwd);
+    if (!snapshot.stateJson) {
       // Fallback to `state list` if parsing fails
       const listRes = await runTerraformStreamed(cwd, ['state', 'list']);
-      resources = (listRes.stdout || '')
+      const resources = (listRes.stdout || '')
         .split(/\r?\n/)
         .map((s) => s.trim())
         .filter(Boolean);
+      const snapshotAt = listRes.code === 0 ? new Date().toISOString() : null;
       return { ...listRes, resources, snapshotAt };
     }
-    return { ...pullRes, resources, snapshotAt };
+    return { ...snapshot, resources: snapshot.resources, snapshotAt: snapshot.snapshotAt };
   });
 });
 
@@ -773,51 +847,47 @@ ipcMain.handle('terraform:state:storage', async (_e, cwd) => {
 });
 
 ipcMain.handle('terraform:state:show', async (_e, cwd, address) => {
-  return withValidCwd('state show', cwd, () => runTerraformStreamed(cwd, ['state', 'show', address]));
+  return withValidCwd('state show', cwd, async () => {
+    const cached = await withStateSnapshotFile(cwd, (tmpPath) => {
+      return runTerraformStreamed(cwd, ['state', 'show', `-state=${tmpPath}`, address]);
+    });
+    if (cached.result) {
+      return { ...cached.result, snapshotAt: cached.snapshot.snapshotAt, fromCache: true };
+    }
+    return runTerraformStreamed(cwd, ['state', 'show', address]);
+  });
 });
 
 ipcMain.handle('terraform:show:json', async (_e, cwd) => {
   return withValidCwd('show:json', cwd, async () => {
-    // Pull current state to a temp file in OS temp dir, then render JSON
-    const tmpName = `tfstate-ui-${Date.now()}-${Math.random().toString(36).slice(2)}.tfstate`;
-    const tmpPath = path.join(os.tmpdir(), tmpName);
-    const pullRes = await runTerraformStreamed(cwd, ['state', 'pull']);
-    if (pullRes.code !== 0 || !pullRes.stdout) {
+    // Render JSON from the cached state snapshot.
+    const cached = await withStateSnapshotFile(cwd, (tmpPath) => {
+      return runTerraformStreamed(cwd, ['show', '-json', tmpPath]);
+    });
+    if (!cached.result) {
       // Fallback to direct show -json if pull failed
       const res = await runTerraformStreamed(cwd, ['show', '-json']);
       let json = null;
       try { json = JSON.parse(res.stdout); } catch (_) {}
       return { ...res, json, snapshotAt: null };
     }
-    const snapshotAt = new Date().toISOString();
-    try {
-      fs.writeFileSync(tmpPath, pullRes.stdout, 'utf-8');
-    } catch (_) {
-      // If writing fails, fallback
-      const res = await runTerraformStreamed(cwd, ['show', '-json']);
-      let json = null;
-      try { json = JSON.parse(res.stdout); } catch (_) {}
-      return { ...res, json, snapshotAt: null };
-    }
-    const showRes = await runTerraformStreamed(cwd, ['show', '-json', tmpPath]);
     let json = null;
-    try { json = JSON.parse(showRes.stdout); } catch (_) { /* ignore parse failure */ }
-    try { fs.unlinkSync(tmpPath); } catch (_) { /* ignore unlink failure */ }
-    return { ...showRes, json, snapshotAt };
+    try { json = JSON.parse(cached.result.stdout); } catch (_) { /* ignore parse failure */ }
+    return { ...cached.result, json, snapshotAt: cached.snapshot.snapshotAt };
   });
 });
 
 ipcMain.handle('terraform:state:mv', async (_e, cwd, sourceAddress, destAddress) => {
-  return withValidCwd('state mv', cwd, () => runTerraformStreamed(cwd, ['state', 'mv', sourceAddress, destAddress]));
+  return withStateMutation('state mv', cwd, () => runTerraformStreamed(cwd, ['state', 'mv', sourceAddress, destAddress]));
 });
 
 ipcMain.handle('terraform:state:rm', async (_e, cwd, address) => {
-  return withValidCwd('state rm', cwd, () => runTerraformStreamed(cwd, ['state', 'rm', address]));
+  return withStateMutation('state rm', cwd, () => runTerraformStreamed(cwd, ['state', 'rm', address]));
 });
 
 ipcMain.handle('terraform:import', async (_e, cwd, address, id, options) => {
   const varArgs = buildVarFileArgs(options && options.varFiles);
-  return withValidCwd('import', cwd, () => runTerraformStreamed(cwd, ['import', '-input=false', ...varArgs, address, id]));
+  return withStateMutation('import', cwd, () => runTerraformStreamed(cwd, ['import', '-input=false', ...varArgs, address, id]));
 });
 
 ipcMain.handle('terraform:plan:json', async (_e, cwd, options) => {
@@ -856,7 +926,7 @@ ipcMain.handle('terraform:workspaces:list', async (_e, cwd) => {
 });
 
 ipcMain.handle('terraform:workspace:select', async (_e, cwd, name) => {
-  return withValidCwd('workspace select', cwd, () => runTerraformStreamed(cwd, ['workspace', 'select', name]));
+  return withStateMutation('workspace select', cwd, () => runTerraformStreamed(cwd, ['workspace', 'select', name]));
 });
 
 // List tfvars files

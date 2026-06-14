@@ -999,6 +999,10 @@ async function loadResourceDetails(address) {
   const pre = ui.resourceDetails;
   pre.innerHTML = '<code class="language-terraform">Loading...</code>';
   const detail = await callWithSpinner(() => window.api.stateShow(state.cwd, address));
+  if (detail && detail.snapshotAt) {
+    state.snapshotAt = detail.snapshotAt;
+    renderSnapshotIndicator();
+  }
   // Prefer stdout; state show sometimes emits ansi, remove it for cleaner highlighting
   let text = (detail.stdout || detail.stderr || '').trim() || '(no details)';
   try {
@@ -1650,6 +1654,10 @@ function wireContextMenu() {
       await refreshResources();
     } else if (action === 'show') {
       const res = await callWithSpinner(() => window.api.stateShow(state.cwd, address));
+      if (res && res.snapshotAt) {
+        state.snapshotAt = res.snapshotAt;
+        renderSnapshotIndicator();
+      }
       const text = (res.stdout || res.stderr || '').trim();
       if (text) {
         ui.resourceDetails.textContent = text;
